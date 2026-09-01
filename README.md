@@ -73,3 +73,32 @@ export default defineConfig([
 ])
 
 ```
+
+## Types dérivés des contrats OpenAPI
+
+Les types de `src/types` sont générés à partir des contrats OpenAPI gelés du
+repo `enervision`, dans `docs/contracts`.
+
+**Ne jamais éditer `src/types` à la main, toujours regénérer via
+`npm run gen:types` après une évolution de contrat.**
+
+```bash
+npm run gen:types
+```
+
+- `openapi-api.json` produit `src/types/api.d.ts` (sites, mesures, alertes, auth).
+- `openapi-predict.json` produit `src/types/predict.d.ts` (prédictions).
+
+Le script résout le dossier des contrats à `../docs/contracts`, ce qui
+correspond à la position du dashboard monté en submodule dans `enervision`. Si
+le dashboard est cloné isolément, pointer la variable d'environnement
+`CONTRACTS_DIR` sur le dossier `docs/contracts` d'une copie du repo
+`enervision` :
+
+```bash
+CONTRACTS_DIR=/chemin/vers/enervision/docs/contracts npm run gen:types
+```
+
+Une évolution de contrat passe d'abord par une PR sur `enervision`, décrite
+dans `docs/contracts/README.md` de ce repo. Les types sont régénérés et
+committés une fois cette PR fusionnée.
