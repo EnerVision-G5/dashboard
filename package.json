@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "gen:types": "node scripts/gen-types.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -29,10 +30,17 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.4",
     "globals": "^17.11.0",
+    "openapi-typescript": "^7.13.0",
     "prettier": "3.9.6",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.67.0",
     "vite": "^8.2.2",
     "vitest": "4.1.11"
+  },
+  "//overrides": "Contournement transitoire. openapi-typescript déclare un peer typescript ^5.x alors que le projet est en TypeScript 6, ce qui fait échouer npm install en ERESOLVE. À retirer quand openapi-typescript déclarera un peer typescript 6, vérifier à chaque montée de version.",
+  "overrides": {
+    "openapi-typescript": {
+      "typescript": "$typescript"
+    }
   }
 }
