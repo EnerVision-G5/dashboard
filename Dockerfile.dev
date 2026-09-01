@@ -1,0 +1,23 @@
+# Dockerfile.dev — image de développement pour le front (Vite + React + TS)
+# Le code source est monté en volume via compose.dev.yaml : pas besoin de rebuild
+# à chaque modification, Vite recharge tout seul (HMR).
+FROM node:24-alpine
+
+# Petit confort : outils souvent utiles en dev dans le container
+RUN apk add --no-cache git
+
+WORKDIR /app
+
+# On installe les dépendances dans une couche séparée pour profiter du cache Docker.
+# Ces fichiers sont ensuite écrasés par le bind mount, mais node_modules reste
+# dans un volume nommé (voir compose.dev.yaml).
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Le reste du code arrive par le volume au runtime.
+COPY . .
+
+EXPOSE 5173
+
+# --host pour écouter sur 0.0.0.0 et être joignable depuis l'hôte
+CMD ["npm", "run", "dev", "--", "--host"]
