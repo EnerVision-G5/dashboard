@@ -5,10 +5,13 @@ on:
   pull_request:
 
 jobs:
-  build-and-lint:
+  lint-test-build:
+    name: Lint, tests et build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: actions/setup-node@v4
         with:
@@ -17,6 +20,11 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run lint
+      - name: Lint (eslint)
+        run: npm run lint
 
-      - run: npm run build
+      - name: Tests
+        run: npm test --if-present
+
+      - name: Build
+        run: npm run build

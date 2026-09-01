@@ -1,4 +1,14 @@
-# React + TypeScript + Vite
+# dashboard
+
+[![ci](https://github.com/EnerVision-G5/dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/EnerVision-G5/dashboard/actions/workflows/ci.yml)
+
+Dashboard web EnerVision (React + Recharts, ADR-008) : consommations, prédictions
+et alertes. Il parle uniquement à l'`api` (REST + JWT).
+
+La CI (`.github/workflows/ci.yml`) enchaîne lint (eslint), tests et build à
+chaque push et sur chaque pull request. Un lint cassé fait échouer la PR.
+
+## React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
