@@ -56,3 +56,24 @@ export function getApiBaseUrl(): string {
 export function getPredictBaseUrl(): string {
   return readRequiredBaseUrl("VITE_PREDICT_BASE_URL");
 }
+
+/** Valeur par défaut : le dashboard appelle le vrai service d'inférence. */
+export const DEFAULT_PREDICTION_SOURCE: PredictionSource = "api";
+
+/**
+ * Origine de la série prédite, choisie explicitement par configuration.
+ *
+ * Le mode `fixture` est un dépannage temporaire, activé à la main tant que le
+ * service d'inférence ne sert pas de prédiction réelle. Il n'est jamais
+ * déclenché par un échec d'appel : en mode `api`, une panne reste une panne
+ * affichée comme telle.
+ *
+ * Une valeur inconnue retombe sur `api` : mieux vaut une erreur réseau visible
+ * qu'un basculement silencieux vers des données inventées à cause d'une faute
+ * de frappe dans le `.env`.
+ */
+export function getPredictionSource(): PredictionSource {
+  return readVariable("VITE_PREDICTION_SOURCE") === "fixture"
+    ? "fixture"
+    : DEFAULT_PREDICTION_SOURCE;
+}

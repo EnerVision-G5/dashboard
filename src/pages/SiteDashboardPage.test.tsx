@@ -167,6 +167,33 @@ describe("SiteDashboardPage", () => {
     expect(screen.getByText("Aucun point de prédiction sur la fenêtre.")).toBeDefined();
   });
 
+  it("n'appelle pas le service d'inférence et affiche le bandeau en mode fixture", async () => {
+    vi.stubEnv("VITE_PREDICTION_SOURCE", "fixture");
+
+    render(<SiteDashboardPage />);
+
+    const badge = await screen.findByText("Données de démonstration");
+    expect(badge).toBeDefined();
+    expect(
+      screen.getByText(/La courbe de prédiction provient d'un JSON figé/),
+    ).toBeDefined();
+    expect(await screen.findByText("Prédiction (kW)")).toBeDefined();
+    expect(fetchPrediction).not.toHaveBeenCalled();
+  });
+
+  it("ne bascule jamais sur le JSON de démonstration quand l'appel réel échoue", async () => {
+    fetchPrediction.mockRejectedValue(
+      new ApiError("Le service d'inférence n'implémente pas encore cet endpoint (501).", 501),
+    );
+
+    render(<SiteDashboardPage />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("501");
+    expect(screen.queryByText("Données de démonstration")).toBeNull();
+    expect(screen.getByText("Aucun point de prédiction sur la fenêtre.")).toBeDefined();
+  });
+
   it("laisse un trou dans la courbe et compte les mesures absentes", async () => {
     fetchReadings.mockResolvedValue([
       makeReading({ timestamp: "2026-09-02T00:00:00Z", consumption_kw: 100 }),

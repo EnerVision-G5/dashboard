@@ -16,6 +16,8 @@ import { useEffect, useState } from "react";
 import type { Prediction } from "../api/predictions";
 import type { ChartPoint } from "../lib/series";
 import { fetchPrediction } from "../api/predictions";
+import { buildDemoPrediction } from "../fixtures/predictionDemo";
+import { getPredictionSource, type PredictionSource } from "../config/env";
 import { fetchReadings } from "../api/readings";
 import { getApiClient, getPredictClient } from "../api/clients";
 import { isCancellation } from "../api/http";
@@ -36,6 +38,8 @@ export interface SiteSeriesState {
   predictionError: string | null;
   /** Profondeur de la fenêtre interrogée, en heures. */
   windowHours: number;
+  /** Origine effective de la série prédite, telle que configurée. */
+  predictionSource: PredictionSource;
 }
 
 interface LoadedState {
@@ -61,6 +65,7 @@ function messageOf(reason: unknown): string {
 
 export function useSiteSeries(siteId: string | null): SiteSeriesState {
   const [loaded, setLoaded] = useState<LoadedState>(EMPTY);
+  const predictionSource = getPredictionSource();
 
   useEffect(() => {
     if (siteId === null) {
@@ -70,7 +75,7 @@ export function useSiteSeries(siteId: string | null): SiteSeriesState {
     const controller = new AbortController();
     let active = true;
 
-    async function load(currentSiteId: string): Promise<void> {
+    async function load(currentSiteId: string, source: PredictionSource): Promise<void> {
       const { startTime, endTime } = recentWindow(new Date(), DEFAULT_WINDOW_HOURS);
       const [readings, prediction] = await Promise.allSettled([
         fetchReadings({
@@ -80,11 +85,15 @@ export function useSiteSeries(siteId: string | null): SiteSeriesState {
           endTime,
           signal: controller.signal,
         }),
-        fetchPrediction({
-          client: getPredictClient(),
-          siteId: currentSiteId,
-          signal: controller.signal,
-        }),
+        // Le mode `fixture` court-circuite l'appel réseau, et lui seul. En
+        // mode `api`, aucun repli n'est prévu : un échec reste un échec.
+        source === "fixture"
+          ? Promise.resolve(buildDemoPrediction(currentSiteId, endTime))
+          : fetchPrediction({
+              client: getPredictClient(),
+              siteId: currentSiteId,
+              signal: controller.signal,
+            }),
       ]);
 
       if (!active) {
@@ -111,13 +120,13 @@ export function useSiteSeries(siteId: string | null): SiteSeriesState {
       });
     }
 
-    void load(siteId);
+    void load(siteId, predictionSource);
 
     return () => {
       active = false;
       controller.abort();
     };
-  }, [siteId]);
+  }, [siteId, predictionSource]);
 
   // Les données ne sont exposées que si elles proviennent bien du site demandé.
   const isCurrent = siteId !== null && loaded.siteId === siteId;
@@ -129,5 +138,6 @@ export function useSiteSeries(siteId: string | null): SiteSeriesState {
     predictionError: isCurrent ? loaded.predictionError : null,
     isLoading: siteId !== null && !isCurrent,
     windowHours: DEFAULT_WINDOW_HOURS,
+    predictionSource,
   };
 }

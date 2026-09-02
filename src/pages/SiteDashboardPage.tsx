@@ -7,6 +7,7 @@
  */
 
 import { ConsumptionPredictionChart } from "../components/ConsumptionPredictionChart";
+import { DemoDataBadge } from "../components/DemoDataBadge";
 import { SiteSelector } from "../components/SiteSelector";
 import { countMissingReadings } from "../lib/series";
 import { useSiteSeries } from "../hooks/useSiteSeries";
@@ -39,6 +40,7 @@ export function SiteDashboardPage() {
     readingsError,
     predictionError,
     windowHours,
+    predictionSource,
   } = useSiteSeries(selectedSite?.site_id ?? null);
 
   const hasActual = points.some((point) => point.actualKw !== null);
@@ -65,6 +67,13 @@ export function SiteDashboardPage() {
       </header>
 
       <main className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6">
+        {predictionSource === "fixture" && (
+          <DemoDataBadge
+            series="La courbe de prédiction provient d'un JSON figé, pas du service d'inférence"
+            reason="POST /api/v1/predict répond encore 501 (contrat EV-06, inférence attendue avec EV-20). Les mesures réelles, elles, viennent bien de l'API métier."
+          />
+        )}
+
         {sitesError !== null && (
           <ErrorNotice title="Référentiel des sites indisponible" message={sitesError} />
         )}
