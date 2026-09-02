@@ -70,7 +70,7 @@ export function SiteDashboardPage() {
         {predictionSource === "fixture" && (
           <DemoDataBadge
             series="La courbe de prédiction provient d'un JSON figé, pas du service d'inférence"
-            reason="POST /api/v1/predict répond encore 501 (contrat EV-06, inférence attendue avec EV-20). Les mesures réelles, elles, viennent bien de l'API métier."
+            reason="POST /api/v1/predict ne sert pas encore de prévision réelle (503 tant qu'aucun modèle n'est publié au registre). Les mesures, elles, viennent bien de l'API métier."
           />
         )}
 

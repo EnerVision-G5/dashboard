@@ -64,7 +64,7 @@ function describe(service: string, status: number, detail: string | null): strin
     case 501:
       return `${service} n'implémente pas encore cet endpoint (501). ${detail ?? ""}`.trim();
     case 503:
-      return `${service} est temporairement indisponible (503).`;
+      return `${service} est temporairement indisponible (503). ${detail ?? ""}`.trim();
     default:
       return status >= 500
         ? `${service} a renvoyé une erreur serveur (${status}).`

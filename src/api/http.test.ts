@@ -45,6 +45,15 @@ describe("toApiError", () => {
     expect(toApiError(httpError(503), "L'API métier").message).toContain("indisponible (503)");
   });
 
+  it("reprend le détail d'un 503 pour rendre la panne actionnable", () => {
+    const error = toApiError(
+      httpError(503, "Aucun modèle chargé depuis models:/enervision_xgboost@champion."),
+      "Le service d'inférence",
+    );
+
+    expect(error.message).toContain("Aucun modèle chargé");
+  });
+
   it("reprend le détail d'un 422", () => {
     const error = toApiError(httpError(422, "start_time doit être antérieur."), "L'API métier");
 

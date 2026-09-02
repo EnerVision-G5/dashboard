@@ -1,13 +1,14 @@
 /**
  * Prédiction de démonstration, servie depuis un JSON versionné.
  *
- * Ce mode n'existe que parce que `POST /api/v1/predict` répond encore 501 sur
- * `predict/develop` : le contrat EV-06 y est déclaré, l'inférence relève
- * d'EV-20 et suivants. Il s'active uniquement par configuration explicite
+ * Ce mode n'existe que parce que `POST /api/v1/predict` ne sert pas encore de
+ * prévision réelle : depuis la fusion de predict#26, l'endpoint est implémenté
+ * mais répond 503 tant que le registre MLflow n'expose pas de modèle entraîné.
+ * Il s'active uniquement par configuration explicite
  * (`VITE_PREDICTION_SOURCE=fixture`), jamais en réaction à une erreur, et
  * l'écran l'annonce visuellement.
  *
- * Pour le retirer une fois Predict livré : repasser la variable à `api`. La
+ * Pour le retirer une fois un modèle publié : repasser la variable à `api`. La
  * suppression complète se limite à ce dossier, à `getPredictionSource` et au
  * bandeau de démonstration.
  *
