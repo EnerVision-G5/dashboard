@@ -9,7 +9,11 @@
 
 import type { AxiosInstance } from "axios";
 import type { EnergyReading } from "../api/readings";
-import type { Prediction, PredictionPoint } from "../api/predictions";
+import type {
+  Prediction,
+  PredictionPoint,
+  PredictionsPage,
+} from "../api/predictions";
 import type { Site } from "../api/sites";
 
 /** Appel enregistré par le client factice. */
@@ -86,7 +90,7 @@ export function makeReading(overrides: Partial<EnergyReading> = {}): EnergyReadi
   };
 }
 
-/** Point conforme à `PredictionPoint`. */
+/** Point conforme à `PredictionPointOut`, tel que l'API le publie. */
 export function makePredictionPoint(
   overrides: Partial<PredictionPoint> = {},
 ): PredictionPoint {
@@ -95,17 +99,30 @@ export function makePredictionPoint(
     predicted_consumption_kw: 130,
     lower_bound_kw: null,
     upper_bound_kw: null,
+    // Chaque point porte sa provenance : la route sert des lignes plates.
+    model_version: "test-1",
+    generated_at: "2026-09-02T00:00:00Z",
     ...overrides,
   };
 }
 
-/** Prévision conforme à `PredictionOut`. */
+/** Série recomposée, telle que `fetchPredictions` la rend. */
 export function makePrediction(overrides: Partial<Prediction> = {}): Prediction {
   return {
-    site_id: "SITE-001",
-    model_version: "test-1",
-    generated_at: "2026-09-02T00:00:00Z",
+    siteId: "SITE-001",
+    modelVersion: "test-1",
+    generatedAt: "2026-09-02T00:00:00Z",
     points: [makePredictionPoint()],
     ...overrides,
+  };
+}
+
+/** Page de prédictions, telle que le contrat la renvoie. */
+export function makePredictionsPage(
+  points: PredictionPoint[] = [makePredictionPoint()],
+): PredictionsPage {
+  return {
+    items: points,
+    meta: { total: points.length, limit: 1000, offset: 0 },
   };
 }

@@ -1,5 +1,5 @@
 /**
- * Instances Axios des services appelés par le dashboard.
+ * Instance Axios de l'API métier, seul service que le dashboard appelle.
  *
  * Les clients sont mémorisés par URL de base : recréer une instance à chaque
  * rendu relancerait inutilement la configuration d'Axios.
@@ -13,7 +13,7 @@
 
 import type { AxiosInstance } from "axios";
 import { closeSession, getToken } from "../auth/session";
-import { getApiBaseUrl, getPredictBaseUrl } from "../config/env";
+import { getApiBaseUrl } from "../config/env";
 import { createHttpClient } from "./http";
 
 const clientsByBaseUrl = new Map<string, AxiosInstance>();
@@ -64,9 +64,4 @@ function clientFor(baseUrl: string): AxiosInstance {
 /** Client de l'API métier (sites, mesures et authentification). */
 export function getApiClient(): AxiosInstance {
   return clientFor(getApiBaseUrl());
-}
-
-/** Client du service d'inférence. */
-export function getPredictClient(): AxiosInstance {
-  return clientFor(getPredictBaseUrl());
 }

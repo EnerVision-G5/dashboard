@@ -45,28 +45,15 @@ export function getApiBaseUrl(): string {
   return readRequiredBaseUrl("VITE_API_BASE_URL");
 }
 
-/**
- * Base HTTP du service d'inférence.
- *
- * Le contrat gelé 1.0.0 publie encore deux spécifications distinctes
- * (`openapi-api.json` et `openapi-predict.json`), donc deux services. Le jour
- * où l'API métier fera proxy vers Predict, seule cette fonction changera : les
- * composants ne connaissent que `fetchPrediction`.
- */
-export function getPredictBaseUrl(): string {
-  return readRequiredBaseUrl("VITE_PREDICT_BASE_URL");
-}
-
-/** Valeur par défaut : le dashboard appelle le vrai service d'inférence. */
+/** Valeur par défaut : le dashboard lit les prédictions archivées par l'API. */
 export const DEFAULT_PREDICTION_SOURCE: PredictionSource = "api";
 
 /**
  * Origine de la série prédite, choisie explicitement par configuration.
  *
- * Le mode `fixture` est un dépannage temporaire, activé à la main tant que le
- * service d'inférence ne sert pas de prédiction réelle. Il n'est jamais
- * déclenché par un échec d'appel : en mode `api`, une panne reste une panne
- * affichée comme telle.
+ * Le mode `fixture` sert au développement, quand aucune prédiction n'a encore
+ * été archivée en base. Il n'est jamais déclenché par un échec d'appel : en
+ * mode `api`, une panne reste une panne affichée comme telle.
  *
  * Une valeur inconnue retombe sur `api` : mieux vaut une erreur réseau visible
  * qu'un basculement silencieux vers des données inventées à cause d'une faute
