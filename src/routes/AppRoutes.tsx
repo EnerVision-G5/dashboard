@@ -6,12 +6,29 @@
  * du navigateur.
  */
 
+import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { LoginPage } from "../pages/LoginPage";
 import { SiteDashboardPage } from "../pages/SiteDashboardPage";
 import { RequireAuth } from "./RequireAuth";
-import { DASHBOARD_PATH, LOGIN_PATH } from "./paths";
+import { DASHBOARD_PATH, DESIGN_SYSTEM_PATH, LOGIN_PATH } from "./paths";
 import { useAuth } from "../auth/useAuth";
+
+/**
+ * Page de démonstration du design system, chargée à la demande et seulement en
+ * développement.
+ *
+ * L'import dynamique est enfermé dans la branche `DEV`, que Vite remplace par
+ * une constante au build : en production la branche est morte, le module n'est
+ * jamais référencé, et le bundle ne le contient pas. Un import statique aurait
+ * pu y survivre selon l'humeur du tree-shaking ; celui-ci ne le peut pas.
+ */
+const DesignSystemPage = import.meta.env.DEV
+  ? lazy(async () => {
+      const module = await import("../pages/DesignSystemPage");
+      return { default: module.DesignSystemPage };
+    })
+  : null;
 
 /**
  * Écran de connexion, ou renvoi vers le dashboard si la session est déjà
@@ -44,6 +61,21 @@ export function AppRoutes() {
           </RequireAuth>
         }
       />
+      {/* Démonstration du design system : jamais servie en production, et
+          volontairement hors authentification — elle n'affiche aucune donnée
+          réelle, exiger une session compliquerait son usage sans rien
+          protéger. */}
+      {DesignSystemPage !== null && (
+        <Route
+          path={DESIGN_SYSTEM_PATH}
+          element={
+            <Suspense fallback={<p role="status">Chargement du design system…</p>}>
+              <DesignSystemPage />
+            </Suspense>
+          }
+        />
+      )}
+
       {/* Toute autre adresse ramène au dashboard, qui renverra lui-même vers
           la connexion si la session est fermée. */}
       <Route path="*" element={<Navigate to={DASHBOARD_PATH} replace />} />

@@ -130,3 +130,50 @@ describe("AppRoutes", () => {
     });
   });
 });
+
+describe("page de démonstration du design system", () => {
+  it("est servie en développement", async () => {
+    renderAt("/design-system");
+
+    expect(
+      await screen.findByRole("heading", { name: "Design system", level: 1 }),
+    ).toBeDefined();
+  });
+
+  it("n'exige pas de session : elle n'affiche aucune donnée réelle", async () => {
+    renderAt("/design-system");
+
+    await screen.findByRole("heading", { name: "Design system", level: 1 });
+    // La page contient elle-même des exemples de champs et de boutons : on
+    // ancre donc sur un texte qui n'appartient qu'à elle. Le voir prouve
+    // qu'aucune garde n'a renvoyé le visiteur anonyme vers la connexion.
+    expect(screen.getByText(/développement uniquement/)).toBeDefined();
+  });
+
+  it("n'est pas déclarée en production, où son adresse retombe sur le dashboard", async () => {
+    vi.stubEnv("DEV", false);
+    vi.resetModules();
+    // Le provider doit venir du MÊME graphe de modules que les routes : après
+    // un resetModules, deux imports distincts donnent deux instances de
+    // contexte, et useAuth ne trouverait rien.
+    const [{ AppRoutes: ProdRoutes }, { AuthProvider: ProdProvider }] = await Promise.all([
+      import("./AppRoutes"),
+      import("../auth/AuthProvider"),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/design-system"]}>
+        <ProdProvider>
+          <ProdRoutes />
+        </ProdProvider>
+      </MemoryRouter>,
+    );
+
+    // Route absente : la règle « * » renvoie au dashboard, qui renvoie au
+    // formulaire faute de session.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Se connecter" })).toBeDefined();
+    });
+    expect(screen.queryByRole("heading", { name: "Design system" })).toBeNull();
+  });
+});
