@@ -1,22 +1,23 @@
 /**
- * Écran de connexion (EV-48).
+ * Écran de connexion (EV-48), repris sur le design system (EV-47).
  *
- * Un `<form>` natif, pas une pile de `<div>` : la validation des champs
- * obligatoires, la soumission au clavier et l'annonce des erreurs par les
- * lecteurs d'écran fonctionnent alors sans code supplémentaire.
+ * Un `<form>` natif, pas une pile de `<div>` : la soumission au clavier et
+ * l'annonce des erreurs par les lecteurs d'écran fonctionnent alors sans code
+ * supplémentaire.
  *
  * La validation est faite ici plutôt que laissée au navigateur seul : le
- * message natif de `required` n'est pas lisible par un test, ni traduit de
- * façon homogène d'un navigateur à l'autre.
+ * message natif de `required` n'est ni testable ni traduit de façon homogène
+ * d'un navigateur à l'autre. D'où le `noValidate`, qui laisse la main au
+ * composant tout en gardant l'obligation annoncée aux technologies
+ * d'assistance.
  */
 
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useAuth } from "../auth/useAuth";
-
-/** Identifiants des champs, partagés avec leurs `<label>`. */
-export const USERNAME_FIELD_ID = "login-username";
-export const PASSWORD_FIELD_ID = "login-password";
+import { Button } from "../ui/Button";
+import { TextField } from "../ui/Field";
+import { ErrorState } from "../ui/states";
 
 /** Message affiché sous un champ obligatoire laissé vide. */
 export const REQUIRED_FIELD_MESSAGE = "Ce champ est obligatoire.";
@@ -35,17 +36,6 @@ function validate(username: string, password: string): FieldErrors {
     errors.password = REQUIRED_FIELD_MESSAGE;
   }
   return errors;
-}
-
-function FieldError({ id, message }: { id: string; message: string | undefined }) {
-  if (message === undefined) {
-    return null;
-  }
-  return (
-    <p id={id} className="text-sm text-red-700">
-      {message}
-    </p>
-  );
 }
 
 export function LoginPage() {
@@ -72,11 +62,11 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-ardoise-50 px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-semibold text-slate-900">Smart Energy Optimiser</h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ardoise-900">Smart Energy Optimiser</h1>
+          <p className="mt-1 text-corps text-ardoise-600">
             Connexion requise pour consulter la supervision des sites.
           </p>
         </div>
@@ -86,72 +76,40 @@ export function LoginPage() {
             void handleSubmit(event);
           }}
           noValidate
-          className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+          className="flex flex-col gap-4 rounded-surface border border-ardoise-200 bg-white p-6 shadow-surface"
         >
-          {error !== null && (
-            <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900">
-              {error}
-            </p>
-          )}
+          {error !== null && <ErrorState title="Connexion refusée">{error}</ErrorState>}
 
-          <div className="flex flex-col gap-1">
-            <label htmlFor={USERNAME_FIELD_ID} className="text-sm font-medium text-slate-700">
-              Identifiant
-            </label>
-            <input
-              id={USERNAME_FIELD_ID}
-              name="username"
-              type="text"
-              autoComplete="username"
-              autoFocus
-              value={username}
-              onChange={(event) => {
-                setUsername(event.target.value);
-              }}
-              aria-invalid={fieldErrors.username !== undefined}
-              aria-describedby={
-                fieldErrors.username === undefined ? undefined : `${USERNAME_FIELD_ID}-error`
-              }
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-teal-700 focus:ring-2 focus:ring-teal-700 focus:outline-none"
-            />
-            <FieldError id={`${USERNAME_FIELD_ID}-error`} message={fieldErrors.username} />
-          </div>
+          <TextField
+            label="Identifiant"
+            name="username"
+            type="text"
+            autoComplete="username"
+            autoFocus
+            required
+            value={username}
+            error={fieldErrors.username}
+            onChange={(event) => {
+              setUsername(event.target.value);
+            }}
+          />
 
-          <div className="flex flex-col gap-1">
-            <label htmlFor={PASSWORD_FIELD_ID} className="text-sm font-medium text-slate-700">
-              Mot de passe
-            </label>
-            <input
-              id={PASSWORD_FIELD_ID}
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value);
-              }}
-              aria-invalid={fieldErrors.password !== undefined}
-              aria-describedby={
-                fieldErrors.password === undefined ? undefined : `${PASSWORD_FIELD_ID}-error`
-              }
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-teal-700 focus:ring-2 focus:ring-teal-700 focus:outline-none"
-            />
-            <FieldError id={`${PASSWORD_FIELD_ID}-error`} message={fieldErrors.password} />
-          </div>
+          <TextField
+            label="Mot de passe"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            error={fieldErrors.password}
+            onChange={(event) => {
+              setPassword(event.target.value);
+            }}
+          />
 
-          <button
-            type="submit"
-            disabled={isSigningIn}
-            className="rounded-md bg-teal-700 px-4 py-2 font-medium text-white shadow-sm hover:bg-teal-800 focus:ring-2 focus:ring-teal-700 focus:ring-offset-2 focus:outline-none disabled:bg-slate-400"
-          >
-            {isSigningIn ? "Connexion en cours…" : "Se connecter"}
-          </button>
-
-          {/* aria-live plutôt qu'un role="status" permanent : l'état de
-              chargement n'est annoncé qu'au moment où il apparaît. */}
-          <p aria-live="polite" className="sr-only">
-            {isSigningIn ? "Connexion en cours" : ""}
-          </p>
+          <Button type="submit" fullWidth isLoading={isSigningIn} loadingLabel="Connexion en cours…">
+            Se connecter
+          </Button>
         </form>
       </div>
     </div>

@@ -67,6 +67,13 @@ function renderProbe() {
 
 beforeEach(() => {
   vi.stubEnv("VITE_API_BASE_URL", "http://api.test");
+  // shouldAdvanceTime : nécessaire pour que le rendu déclenché par un clic
+  // (Testing Library planifie sa propre reconciliation via un timer interne)
+  // progresse sans qu'il faille avancer l'horloge à la main après chaque
+  // interaction. La contrepartie, gérée dans le test de marge ci-dessous, est
+  // que l'horloge dérive aussi du temps réel écoulé entre deux appels : les
+  // avances manuelles ne doivent donc jamais viser une fenêtre de quelques
+  // millisecondes, qu'un runner chargé peut dépasser à elles seules.
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(NOW);
 });
@@ -164,6 +171,14 @@ describe("AuthProvider", () => {
   });
 
   it("ferme la session à l'échéance du jeton, marge comprise", async () => {
+    // La fenêtre de chaque côté du seuil est en secondes, pas en
+    // millisecondes : avec shouldAdvanceTime, l'horloge simulée dérive aussi
+    // du temps réel écoulé entre deux appels, et une fenêtre de 1-2 ms serait
+    // déjà franchie par cette seule dérive sur un runner chargé — c'est
+    // exactement ce qui a rendu ce test intermittent en CI. Dix secondes de
+    // marge absorbent une dérive bien supérieure à ce qu'un test unitaire
+    // peut réellement accumuler.
+    const SURETE_MS = 10_000;
     respondWith(makeToken(ONE_HOUR_MS));
     renderProbe();
     await act(async () => {
@@ -172,12 +187,12 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("state").textContent).toBe("connecté");
 
     await act(async () => {
-      vi.advanceTimersByTime(ONE_HOUR_MS - EXPIRY_MARGIN_MS - 1);
+      vi.advanceTimersByTime(ONE_HOUR_MS - EXPIRY_MARGIN_MS - SURETE_MS);
     });
     expect(screen.getByTestId("state").textContent).toBe("connecté");
 
     await act(async () => {
-      vi.advanceTimersByTime(2);
+      vi.advanceTimersByTime(2 * SURETE_MS);
     });
     await waitFor(() => {
       expect(screen.getByTestId("state").textContent).toBe("anonyme");

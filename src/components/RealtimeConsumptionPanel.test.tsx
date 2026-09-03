@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MISSING_VALUE, RealtimeConsumptionPanel } from "./RealtimeConsumptionPanel";
+import { RealtimeConsumptionPanel } from "./RealtimeConsumptionPanel";
+import { MISSING_VALUE } from "../ui/MetricTile";
 import { makeReading } from "../test/doubles";
 
 const NOW = new Date("2026-09-03T10:00:00Z");
@@ -100,7 +101,9 @@ describe("RealtimeConsumptionPanel", () => {
   it("affiche l'erreur du flux plutôt qu'une valeur d'âge inconnu", () => {
     renderPanel({ reading: null, error: "Site introuvable." });
 
-    expect(screen.getByRole("alert").textContent).toBe("Site introuvable.");
+    const alerte = screen.getByRole("alert");
+    expect(alerte.textContent).toContain("Mesure temps réel indisponible");
+    expect(alerte.textContent).toContain("Site introuvable.");
     expect(screen.queryByText(/Relevé du/)).toBeNull();
   });
 
