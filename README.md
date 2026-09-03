@@ -109,16 +109,38 @@ explicitement. En local, `AUTH_ENABLED=false` côté API permet aussi de
 travailler sans jeton — mais l'écran de connexion reste alors affiché, le
 dashboard n'ayant aucun moyen de savoir que l'API est en mode anonyme.
 
-### Le jeton reste en mémoire
+### Où vit le jeton
 
-Le jeton n'est écrit **ni dans `localStorage`, ni dans `sessionStorage`, ni
-dans un cookie** : c'est la règle du guide d'intégration front, et elle a une
-raison. Un jeton posé dans le stockage du navigateur reste lisible par tout
-script chargé sur l'origine, donc exfiltrable par une injection ; en mémoire, il
-disparaît avec l'onglet.
+Dans **`sessionStorage`**, sous la clé `enervision.auth.token`, et nulle part
+ailleurs. Jamais dans `localStorage`, jamais dans un cookie.
 
-Conséquence assumée : **un rechargement de page ramène l'écran de connexion.**
-Ce n'est pas un bug.
+| | Refresh | Nouvel onglet | Onglet fermé |
+| --- | --- | --- | --- |
+| Session conservée | oui | non | non |
+
+Le choix est un compromis, documenté en détail dans
+[`docs/EV-48-securite.md`](docs/EV-48-securite.md) :
+
+- un **cookie `httpOnly`** serait hors d'atteinte de tout JavaScript, donc le
+  meilleur choix sur le fond. Il est écarté faute de moyen : l'API délivre le
+  jeton dans un corps JSON et ne pose aucun cookie. L'y amener demande une PR
+  de contrat ;
+- **`localStorage`** survivrait à la fermeture de l'onglet et serait partagé
+  entre onglets — précisément ce que l'OWASP déconseille pour un jeton ;
+- **`sessionStorage`** garde la session au rafraîchissement, meurt avec
+  l'onglet et n'est pas partagé.
+
+> Le guide d'intégration front demandait le jeton « en mémoire, pas en
+> localStorage ». `sessionStorage` s'en écarte volontairement, pour l'usage, et
+> la contrepartie est la **CSP** posée dans `nginx.conf` : c'est elle qui
+> empêche un script injecté d'être chargé, donc de lire le stockage. Le guide
+> est à amender en conséquence.
+
+Un jeton stocké n'est jamais accordé sur parole : au chargement, il repasse par
+le même contrôle que celui délivré par l'API, échéance comprise. Un jeton échu
+ou trafiqué est effacé du stockage plutôt que porté sur des appels qui
+reviendraient tous en 401. Ce contrôle reste du confort — la signature est
+vérifiée par l'API, seule autorité.
 
 ### Fin de session
 
@@ -260,6 +282,22 @@ ne sont jamais modifiées.
 supprimer la ligne) et relancer `npm run dev`. La suppression définitive du mode
 se limite à `src/fixtures/`, à `getPredictionSource` dans `src/config/env.ts` et
 au composant `DemoDataBadge`.
+
+## Sécurité
+
+La revue complète est dans [`docs/EV-48-securite.md`](docs/EV-48-securite.md) :
+cycle de vie du jeton, surface XSS, en-têtes servis par Nginx, fuite
+d'information, dépendances, et cinq recommandations.
+
+Deux points à retenir avant de déployer :
+
+- la **CSP** de `nginx.conf` pose `connect-src 'self'`, ce qui suppose le
+  dashboard et l'API sur la même origine derrière Traefik. Si
+  `VITE_API_BASE_URL` pointe une autre origine, il faut l'ajouter à la
+  directive, sinon le navigateur bloquera **tous** les appels ;
+- les variables `VITE_` sont remplacées par leur valeur **à la compilation** et
+  se lisent en clair dans le bundle livré. Ce sont des adresses de service, et
+  aucune ne doit jamais porter de secret.
 
 ## Recette manuelle
 
