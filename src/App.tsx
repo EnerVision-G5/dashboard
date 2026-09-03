@@ -1,11 +1,7 @@
-import './App.css'
+import { SiteDashboardPage } from './pages/SiteDashboardPage'
 
 function App() {
-  return (
-    <>
-      <h3 className="text-red-500"> Hello world.</h3>
-    </>
-  )
+  return <SiteDashboardPage />
 }
 
 export default App
