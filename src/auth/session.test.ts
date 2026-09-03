@@ -1,9 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  STORAGE_KEY,
   closeSession,
   getSession,
   getToken,
   openSession,
+  restoreSession,
   subscribeToSession,
 } from "./session";
 
@@ -26,8 +28,14 @@ const VALID = makeToken({
   exp: NOW.getTime() / 1000 + 3600,
 });
 
+beforeEach(() => {
+  sessionStorage.clear();
+});
+
 afterEach(() => {
   closeSession();
+  sessionStorage.clear();
+  vi.restoreAllMocks();
 });
 
 describe("session", () => {
@@ -85,5 +93,87 @@ describe("session", () => {
     unsubscribe();
 
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe("persistance de la session", () => {
+  it("écrit le jeton dans sessionStorage à l'ouverture", () => {
+    openSession(VALID, NOW);
+
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBe(VALID);
+  });
+
+  it("n'écrit jamais dans localStorage, que l'OWASP déconseille pour un jeton", () => {
+    openSession(VALID, NOW);
+
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(localStorage.length).toBe(0);
+  });
+
+  it("efface le jeton du stockage à la déconnexion", () => {
+    openSession(VALID, NOW);
+
+    closeSession();
+
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("n'écrit rien quand le jeton présenté est refusé", () => {
+    openSession("pas-un-jeton", NOW);
+
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("préfixe sa clé pour ne pas entrer en collision sur localhost", () => {
+    expect(STORAGE_KEY.startsWith("enervision.")).toBe(true);
+  });
+});
+
+describe("restoreSession", () => {
+  it("ne rend rien quand le stockage est vide", () => {
+    expect(restoreSession(NOW)).toBeNull();
+    expect(getSession()).toBeNull();
+  });
+
+  it("rouvre la session laissée par un chargement précédent", () => {
+    sessionStorage.setItem(STORAGE_KEY, VALID);
+
+    const session = restoreSession(NOW);
+
+    expect(session?.claims.username).toBe("dev.reader");
+    expect(getToken()).toBe(VALID);
+  });
+
+  it("refuse un jeton stocké échu et le retire du stockage", () => {
+    const expired = makeToken({ sub: "dev.reader", exp: NOW.getTime() / 1000 - 1 });
+    sessionStorage.setItem(STORAGE_KEY, expired);
+
+    expect(restoreSession(NOW)).toBeNull();
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("refuse un jeton stocké trafiqué et le retire du stockage", () => {
+    sessionStorage.setItem(STORAGE_KEY, "valeur.posee.a.la.main");
+
+    expect(restoreSession(NOW)).toBeNull();
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("ne lève pas quand le navigateur refuse l'accès au stockage", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("accès aux données de site bloqué");
+    });
+
+    expect(() => restoreSession(NOW)).not.toThrow();
+    expect(getSession()).toBeNull();
+  });
+
+  it("garde la session en mémoire même si l'écriture échoue", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("quota dépassé");
+    });
+
+    expect(openSession(VALID, NOW)?.claims.username).toBe("dev.reader");
+    expect(getToken()).toBe(VALID);
   });
 });
