@@ -19,17 +19,25 @@ jamais l'API Mock IoT directement.**
 
 ## Design system
 
-L'interface repose sur un design system minimal (**EV-47**) : jetons déclarés
-dans `src/index.css`, composants dans `src/ui/`, et une page de démonstration
-servie **en développement seulement** sur
-[`/design-system`](http://localhost:5173/design-system).
-
-Le mode d'emploi est dans [`docs/design-system.md`](docs/design-system.md).
+L'interface repose sur un design system minimal (**EV-47**), dont la note de
+conception — validée avant écriture du code — vit dans le repo `enervision`
+sous `Architecture/EnerVision-Design-System.docx`.
 
 Son principe tient en une phrase : *un écran de supervision affiche trois
 natures de valeur — ce qui a été **mesuré**, ce qui a été **calculé**, et ce
 qu'on **ignore** — et le système a une obligation, qu'on ne puisse jamais les
 confondre.*
+
+| | Emplacement |
+| --- | --- |
+| Jetons (couleur, typographie, rayon, élévation) | `src/index.css`, dans `@theme` |
+| Composants (`Button`, `Card`, `Field`, `MetricTile`, `Alert`, les quatre états) | `src/ui/` |
+| Page de démonstration, **développement seulement** | [`/design-system`](http://localhost:5173/design-system) |
+| Mode d'emploi complet | [`docs/design-system.md`](docs/design-system.md) |
+
+La page de démonstration n'existe pas dans le bundle de production — son
+import est enfermé dans `import.meta.env.DEV`, que Vite remplace par une
+constante au build ; un test le vérifie en forçant `DEV` à `false`.
 
 ![Le dashboard sur trois largeurs](docs/images/app-dashboard-bureau.png)
 
