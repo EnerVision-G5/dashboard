@@ -34,6 +34,51 @@ export function readingsPath(siteId: string): string {
   return `/api/v1/sites/${encodeURIComponent(siteId)}/readings`;
 }
 
+/** Chemin de la dernière mesure connue d'un site. */
+export function latestReadingPath(siteId: string): string {
+  return `${readingsPath(siteId)}/latest`;
+}
+
+/**
+ * Âge au-delà duquel la dernière mesure est tenue pour en retard.
+ *
+ * La collecte interroge l'API Mock toutes les minutes. Deux minutes laissent
+ * donc passer un cycle manqué sans crier au loup, et signalent le suivant :
+ * c'est le seuil retenu par le guide d'intégration front.
+ */
+export const STALE_READING_MS = 120_000;
+
+/**
+ * Récupère la dernière mesure connue d'un site.
+ *
+ * Sert le panneau temps réel. Le 404 du contrat — site inconnu, ou site sans
+ * aucune mesure — remonte comme les autres erreurs : c'est au panneau de
+ * décider quoi en dire, pas à ce client d'inventer une mesure vide.
+ */
+export async function fetchLatestReading(
+  client: AxiosInstance,
+  siteId: string,
+  signal?: AbortSignal,
+): Promise<EnergyReading> {
+  try {
+    const response = await client.get<EnergyReading>(latestReadingPath(siteId), { signal });
+    return response.data;
+  } catch (error) {
+    throw toApiError(error, API_SERVICE_LABEL);
+  }
+}
+
+/**
+ * Vrai si la mesure date de plus de `STALE_READING_MS`.
+ *
+ * Un horodatage illisible est tenu pour en retard : mieux vaut afficher un
+ * doute que présenter une valeur d'âge inconnu comme fraîche.
+ */
+export function isStale(reading: EnergyReading, now: Date = new Date()): boolean {
+  const measuredAt = Date.parse(reading.timestamp);
+  return Number.isNaN(measuredAt) || now.getTime() - measuredAt > STALE_READING_MS;
+}
+
 interface FetchReadingsOptions {
   client: AxiosInstance;
   siteId: string;
