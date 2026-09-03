@@ -8,6 +8,11 @@ L'écran livré par **EV-16** permet à un client pilote de choisir un site et d
 lire, sur un même graphique, sa **consommation réelle** des 24 dernières heures
 et sa **prédiction** sur les 24 heures suivantes.
 
+**EV-48** y ajoute l'authentification : une page de connexion garde l'entrée, le
+jeton obtenu signe tous les appels, et le dashboard est mis en page d'après la
+maquette « Smart Energy Optimiser » — consommation temps réel, recommandations,
+indicateurs.
+
 Le dashboard ne parle qu'à des services EnerVision : l'API métier pour les
 sites et les mesures, le service d'inférence pour la prédiction. **Il n'appelle
 jamais l'API Mock IoT directement.**
@@ -50,9 +55,9 @@ Copier `.env.example` en `.env` (ou `.env.local`, ignoré par git) et adapter.
 | `VITE_DEV_PROXY_API_TARGET`     | Cible du proxy de dev pour `/proxy/api` (facultatif)     | —           |
 | `VITE_DEV_PROXY_PREDICT_TARGET` | Cible du proxy de dev pour `/proxy/predict` (facultatif) | —           |
 
-Aucune de ces valeurs n'est un secret. Le dashboard n'émet ni jeton ni
-identifiant : l'authentification relève d'EV-12, et l'API métier sert les
-lectures en anonyme tant que `AUTH_ENABLED=false`.
+Aucune de ces valeurs n'est un secret : ce sont des adresses de service. Le
+jeton, lui, n'est jamais configuré — il est obtenu à la connexion et vit en
+mémoire, voir [Authentification](#authentification).
 
 Une base absente n'est pas remplacée par une valeur devinée : l'écran affiche
 une erreur de configuration nommant la variable manquante.
@@ -84,16 +89,127 @@ VITE_DEV_PROXY_PREDICT_TARGET=http://localhost:8001
 Ce proxy ne concerne que `npm run dev`. En production, l'API doit autoriser
 l'origine du dashboard, ou le servir derrière le même nom de domaine.
 
+## Authentification
+
+Flux OAuth2 mot de passe (ADR-009). L'écran de connexion poste les identifiants
+en `application/x-www-form-urlencoded` sur `POST /api/v1/auth/token`, et le
+jeton obtenu signe ensuite chaque appel en `Authorization: Bearer`.
+
+```
+POST /api/v1/auth/token          → { access_token, token_type, expires_in }
+                                 ↓
+             jeton en mémoire (src/auth/session.ts)
+                                 ↓
+    intercepteur Axios (src/api/clients.ts) → Authorization: Bearer …
+```
+
+Comptes de développement : `dev.reader` / `changeme-dev`, issus du seed
+`enervision-db/dev-seed/dev_users.py` du repo **infra**, à appliquer
+explicitement. En local, `AUTH_ENABLED=false` côté API permet aussi de
+travailler sans jeton — mais l'écran de connexion reste alors affiché, le
+dashboard n'ayant aucun moyen de savoir que l'API est en mode anonyme.
+
+### Où vit le jeton
+
+Dans **`sessionStorage`**, sous la clé `enervision.auth.token`, et nulle part
+ailleurs. Jamais dans `localStorage`, jamais dans un cookie.
+
+| | Refresh | Nouvel onglet | Onglet fermé |
+| --- | --- | --- | --- |
+| Session conservée | oui | non | non |
+
+Le choix est un compromis, documenté en détail dans
+[`docs/EV-48-securite.md`](docs/EV-48-securite.md) :
+
+- un **cookie `httpOnly`** serait hors d'atteinte de tout JavaScript, donc le
+  meilleur choix sur le fond. Il est écarté faute de moyen : l'API délivre le
+  jeton dans un corps JSON et ne pose aucun cookie. L'y amener demande une PR
+  de contrat ;
+- **`localStorage`** survivrait à la fermeture de l'onglet et serait partagé
+  entre onglets — précisément ce que l'OWASP déconseille pour un jeton ;
+- **`sessionStorage`** garde la session au rafraîchissement, meurt avec
+  l'onglet et n'est pas partagé.
+
+> Le guide d'intégration front demandait le jeton « en mémoire, pas en
+> localStorage ». `sessionStorage` s'en écarte volontairement, pour l'usage, et
+> la contrepartie est la **CSP** posée dans `nginx.conf` : c'est elle qui
+> empêche un script injecté d'être chargé, donc de lire le stockage. Le guide
+> est à amender en conséquence.
+
+Un jeton stocké n'est jamais accordé sur parole : au chargement, il repasse par
+le même contrôle que celui délivré par l'API, échéance comprise. Un jeton échu
+ou trafiqué est effacé du stockage plutôt que porté sur des appels qui
+reviendraient tous en 401. Ce contrôle reste du confort — la signature est
+vérifiée par l'API, seule autorité.
+
+### Fin de session
+
+Trois chemins la ferment, tous vers l'écran de connexion :
+
+- **déconnexion explicite**, par le bouton de l'en-tête ;
+- **échéance du jeton**, lue dans sa revendication `exp`, 30 secondes avant
+  l'heure pour qu'une requête déjà partie ne revienne pas en 401 ;
+- **401 renvoyé par l'API**, quelle que soit la route : l'intercepteur de
+  réponse ferme la session sans qu'aucun écran ait à le décider.
+
+**Pas de rafraîchissement silencieux.** Le contrat gelé 1.0.0 ne publie que le
+flux mot de passe, sans `refresh_token` : redemander un jeton exigerait de garder
+le mot de passe en mémoire toute la session, ce qui coûte plus cher que la
+reconnexion évitée. Le jour où le contrat publiera un flux de rafraîchissement,
+seul le minuteur de `src/auth/AuthProvider.tsx` changera.
+
+### Ce que la garde de route protège
+
+`RequireAuth` empêche d'**afficher** un écran qui ne pourrait que se remplir
+d'erreurs. Elle ne protège aucune donnée : c'est l'API qui refuse en 401 une
+requête sans jeton valide, et elle seule fait autorité. Le durcissement complet
+des routes est le périmètre d'**EV-49**.
+
+Le rôle (`reader` ou `writer`) est lu dans le jeton, le contrat ne publiant
+aucun endpoint de profil. La signature n'est pas vérifiée côté navigateur et ne
+peut pas l'être : la clé HS256 est le secret de l'API. Ce décodage sert à
+l'affichage et à l'échéance, jamais à autoriser quoi que ce soit.
+
+## Écran de supervision
+
+La mise en page suit la maquette « Smart Energy Optimiser » : un en-tête portant
+le titre, le sélecteur de site et — à droite — la puissance souscrite et la
+localisation du site choisi, puis trois zones.
+
+| Zone | Source | État |
+| --- | --- | --- |
+| Consommation temps réel | `GET /sites/{id}/readings/latest`, rafraîchi toutes les 30 s | Servie |
+| Recommandations | aucune | Vide, voir ci-dessous |
+| Indicateurs | graphique consommation / prédiction d'EV-16 | Servi |
+
+**Consommation temps réel** affiche la puissance instantanée, puis la tension,
+l'intensité, la température et l'humidité — toutes issues de la même
+`EnergyReadingOut`. Une valeur `null` y est affichée comme absente (`—`), jamais
+comme un zéro, et la valeur imputée par l'ETL n'est jamais substituée au relevé :
+elle est mentionnée pour ce qu'elle est. Une mesure vieille de plus de deux
+minutes signale un retard d'ingestion (seuil du guide d'intégration ; le bandeau
+de fraîcheur complet, par capteur, relève d'EV-18).
+
+**Recommandations** tient sa place dans la mise en page sans rien afficher : le
+contrat gelé 1.0.0 ne publie aucune route de recommandations. Celle qui est
+pressentie, `GET /sites/{id}/recommendations`, relève du contrat 1.2.0 et du
+ticket **EV-32**, et le guide d'intégration demande de ne pas l'anticiper tant
+que la PR de contrat n'est pas fusionnée. Trois recommandations d'exemple
+auraient rempli la maquette, mais des conseils inventés sur une facture
+d'électricité seraient lus comme de vrais conseils.
+
 ## Flux de données
 
 ```
-GET  /api/v1/sites               → référentiel, alimente le sélecteur
-GET  /api/v1/sites/{id}/readings → mesures des 24 dernières heures
-POST /api/v1/predict             → prévision sur 24 heures
-                                 ↓
-             fusion par horodatage (src/lib/series.ts)
-                                 ↓
-                  graphique Recharts, deux courbes
+POST /api/v1/auth/token                 → jeton, signe tous les appels suivants
+GET  /api/v1/sites                      → référentiel, alimente le sélecteur
+GET  /api/v1/sites/{id}/readings/latest → dernière mesure, panneau temps réel
+GET  /api/v1/sites/{id}/readings        → mesures des 24 dernières heures
+POST /api/v1/predict                    → prévision sur 24 heures
+                                        ↓
+                    fusion par horodatage (src/lib/series.ts)
+                                        ↓
+                         graphique Recharts, deux courbes
 ```
 
 Au chargement, le premier site dont le `status` vaut `active` est présélectionné
@@ -127,9 +243,10 @@ L'API conserve les valeurs brutes de la source. Le dashboard fait de même :
 ### États d'erreur
 
 Les deux flux échouent indépendamment : une prédiction indisponible n'efface pas
-des mesures correctement reçues. Chaque code a un message dédié — 401 (renvoi
-vers EV-12), 404, 422, 501, 503 et service injoignable — et le `detail` du
-contrat est repris quand il apporte une information utile.
+des mesures correctement reçues. Chaque code a un message dédié — 401, 403, 404,
+422, 501, 503 et service injoignable — et le `detail` du contrat est repris
+quand il apporte une information utile. Toutes les erreurs des deux contrats
+ont la même forme, un objet à un seul champ `detail`.
 
 **Aucune erreur ne déclenche le mode démonstration.** En mode `api`, une panne
 est affichée comme une panne.
@@ -166,10 +283,34 @@ supprimer la ligne) et relancer `npm run dev`. La suppression définitive du mod
 se limite à `src/fixtures/`, à `getPredictionSource` dans `src/config/env.ts` et
 au composant `DemoDataBadge`.
 
+## Sécurité
+
+La revue complète est dans [`docs/EV-48-securite.md`](docs/EV-48-securite.md) :
+cycle de vie du jeton, surface XSS, en-têtes servis par Nginx, fuite
+d'information, dépendances, et cinq recommandations.
+
+Deux points à retenir avant de déployer :
+
+- la **CSP** de `nginx.conf` pose `connect-src 'self'`, ce qui suppose le
+  dashboard et l'API sur la même origine derrière Traefik. Si
+  `VITE_API_BASE_URL` pointe une autre origine, il faut l'ajouter à la
+  directive, sinon le navigateur bloquera **tous** les appels ;
+- les variables `VITE_` sont remplacées par leur valeur **à la compilation** et
+  se lisent en clair dans le bundle livré. Ce sont des adresses de service, et
+  aucune ne doit jamais porter de secret.
+
 ## Recette manuelle
 
 La procédure détaillée, avec les commandes exactes et ce qui a été vérifié, est
-dans [`docs/EV-16-recette.md`](docs/EV-16-recette.md).
+dans [`docs/EV-16-recette.md`](docs/EV-16-recette.md) pour l'écran de
+consommation, et dans [`docs/EV-48-recette.md`](docs/EV-48-recette.md) pour
+l'authentification et la mise en page.
+
+La recette d'EV-48 signale un **point bloquant** : le seed de comptes de
+développement du repo infra écrit un hachage bcrypt, que l'API — qui ne vérifie
+que de l'argon2id — refuse. Les comptes `dev.reader` et `dev.writer` ne peuvent
+donc pas se connecter tant qu'infra n'a pas corrigé ; le contournement local est
+décrit dans la recette.
 
 ## Types dérivés des contrats OpenAPI
 

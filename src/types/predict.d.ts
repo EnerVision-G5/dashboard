@@ -13,7 +13,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Prédire la consommation d'un site */
+        /**
+         * Prédire la consommation d'un site
+         * @description Retourne la série prédite d'un site sur l'horizon demandé.
+         */
         post: operations["predict_api_v1_predict_post"];
         delete?: never;
         options?: never;
@@ -31,6 +34,10 @@ export interface paths {
         /**
          * Vérifier la disponibilité du service
          * @description Endpoint trivial, réellement implémenté : aucune dépendance externe.
+         *
+         *     Il ne consulte volontairement pas le registre. C'est la sonde de vivacité
+         *     de l'hébergeur : la lier à MLflow ferait redémarrer un service en parfait
+         *     état chaque fois que le registre tousse.
          */
         get: operations["get_health_health_get"];
         put?: never;
@@ -187,6 +194,15 @@ export interface operations {
             };
             /** @description Paramètres de requête invalides. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Aucun modèle résolu par le registre. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
