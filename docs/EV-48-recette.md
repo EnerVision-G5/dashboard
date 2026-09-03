@@ -125,7 +125,46 @@ compte avec l'`UPDATE` inverse.
 | 15 | Le panneau recommandations ne montre aucune donnée et dit pourquoi | oui, renvoi au contrat 1.2.0 et à EV-32 |
 | 16 | Le graphique d'EV-16 reste intact sous « Indicateurs » | oui, deux courbes et bandeau de démonstration |
 
-## 3. Ce qui n'a pas été vérifié
+## 3. Reprise après la montée de l'API en 1.1.0
+
+`api@develop` a intégré EV-38 (`c52b2d2`) : le contrat gelé passe en **1.1.0**,
+`GET /sites/{site_id}/predictions` apparaît, et `POST /api/v1/predict` disparaît
+du contrat de l'API métier. Les types du dashboard ont été régénérés
+(`npm run gen:types`), sans changement de code applicatif.
+
+La recette a été rejouée en entier contre cette version. Les seize points du
+§ 2 repassent. Deux constats s'y ajoutent.
+
+### Le front tourne en local sans le service d'inférence
+
+Avec `VITE_PREDICTION_SOURCE=api` et aucun service d'inférence démarré, le
+dashboard reste **entièrement utilisable** : sites, sélecteur, panneau temps
+réel et courbe de consommation réelle sont servis, et la prédiction échoue
+proprement dans son propre encart — « Prédiction indisponible · Le service
+d'inférence a renvoyé une erreur serveur (502) » — sans effacer les mesures.
+C'est le comportement voulu : les deux flux échouent indépendamment.
+
+### Second écart api ↔ infra : la table `prediction`
+
+`GET /sites/{site_id}/predictions` répond **500** contre une base construite
+depuis `infra/enervision-db/initdb/` :
+
+```
+UndefinedColumnError: column prediction.lower_bound_kw does not exist
+```
+
+`app/models/prediction.py` déclare `generated_at`, `lower_bound_kw` et
+`upper_bound_kw`, que `01_schema.sql` ne contient pas. Aucune migration ne les
+ajoute — ni dans `alembic/versions/` (vide), ni dans `initdb/`, alors que les
+colonnes d'imputation de `mesure` avaient reçu leur propre
+`03_mesure_imputation.sql`.
+
+C'est le même motif que l'écart bcrypt / argon2 ci-dessus : le modèle ORM de
+l'API a évolué sans que le schéma d'infra suive. Sans objet pour EV-48, dont le
+périmètre exclut la prédiction, mais bloquant pour EV-38 dès qu'on voudra lire
+une prédiction réelle.
+
+## 4. Ce qui n'a pas été vérifié
 
 - **L'échéance réelle du jeton** au bout d'une heure : le minuteur est couvert
   par les tests avec une horloge factice, pas en recette manuelle.
