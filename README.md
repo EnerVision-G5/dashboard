@@ -264,7 +264,15 @@ au composant `DemoDataBadge`.
 ## Recette manuelle
 
 La procédure détaillée, avec les commandes exactes et ce qui a été vérifié, est
-dans [`docs/EV-16-recette.md`](docs/EV-16-recette.md).
+dans [`docs/EV-16-recette.md`](docs/EV-16-recette.md) pour l'écran de
+consommation, et dans [`docs/EV-48-recette.md`](docs/EV-48-recette.md) pour
+l'authentification et la mise en page.
+
+La recette d'EV-48 signale un **point bloquant** : le seed de comptes de
+développement du repo infra écrit un hachage bcrypt, que l'API — qui ne vérifie
+que de l'argon2id — refuse. Les comptes `dev.reader` et `dev.writer` ne peuvent
+donc pas se connecter tant qu'infra n'a pas corrigé ; le contournement local est
+décrit dans la recette.
 
 ## Types dérivés des contrats OpenAPI
 
