@@ -17,6 +17,22 @@ Le dashboard ne parle qu'à des services EnerVision : l'API métier pour les
 sites et les mesures, le service d'inférence pour la prédiction. **Il n'appelle
 jamais l'API Mock IoT directement.**
 
+## Design system
+
+L'interface repose sur un design system minimal (**EV-47**) : jetons déclarés
+dans `src/index.css`, composants dans `src/ui/`, et une page de démonstration
+servie **en développement seulement** sur
+[`/design-system`](http://localhost:5173/design-system).
+
+Le mode d'emploi est dans [`docs/design-system.md`](docs/design-system.md).
+
+Son principe tient en une phrase : *un écran de supervision affiche trois
+natures de valeur — ce qui a été **mesuré**, ce qui a été **calculé**, et ce
+qu'on **ignore** — et le système a une obligation, qu'on ne puisse jamais les
+confondre.*
+
+![Le dashboard sur trois largeurs](docs/images/app-dashboard-bureau.png)
+
 ## Prérequis
 
 - **Node 24** (version utilisée par la CI ; `jsdom` exige au minimum Node 22.22
