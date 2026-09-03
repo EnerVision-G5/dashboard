@@ -1,0 +1,32 @@
+# Regles du scan ZAP (zap-baseline.py -c rules.tsv).
+# Format impose par ZAP : identifiant<TAB>action<TAB>libelle, tabulations
+# obligatoires, les trois colonnes sont exigees.
+#
+# Tout ce qui n'est pas liste ici reste en WARN et fait echouer le job : la
+# liste ci-dessous est donc la seule chose a relire quand la CI casse sur ZAP.
+# Retirer une ligne suffit a remettre la regle correspondante bloquante.
+#
+# En-tetes de securite absents de nginx.conf. Ils sont poses ici en IGNORE
+# pour que l'ajout du scan n'arrive pas rouge, mais ce sont de vraies
+# lacunes, et corrigeables dans ce depot : nginx.conf est a cote. Ajouter
+# les add_header correspondants puis retirer ces lignes rend la regle
+# bloquante et interdit la regression.
+10020	IGNORE	Anti-clickjacking Header
+10021	IGNORE	X-Content-Type-Options Header Missing
+10038	IGNORE	Content Security Policy Header Not Set
+10063	IGNORE	Permissions Policy Header Not Set
+# HSTS : le TLS est termine en amont du conteneur, jamais par ce Nginx. Le
+# scan joint l'image en clair sur la boucle locale du runner, ou l'en-tete
+# n'aurait aucun sens.
+10035	IGNORE	Strict-Transport-Security Header Not Set
+# Cache : les assets fingerprintes par Vite sont volontairement servis en
+# public, immutable, 1 an. C'est la configuration voulue, pas un defaut.
+10015	IGNORE	Incomplete or No Cache-control Header
+10049	IGNORE	Storable and Cacheable Content
+# Constats informatifs sur un bundle minifie : ZAP lit les sources Vite comme
+# du contenu applicatif et signale les horodatages et commentaires des
+# dependances, que ce depot ne reecrit pas.
+10096	IGNORE	Timestamp Disclosure
+10027	IGNORE	Information Disclosure - Suspicious Comments
+# Detection d'une application monopage : c'est le cas, par construction.
+10109	IGNORE	Modern Web Application
