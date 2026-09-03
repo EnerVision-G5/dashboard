@@ -135,9 +135,6 @@ export function DesignSystemPage() {
     <div className="min-h-screen bg-ardoise-50">
       <header className="border-b border-ardoise-200 bg-white">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-          <p className="text-annexe font-semibold tracking-wide text-mesure-700 uppercase">
-            EnerVision · EV-47 · développement uniquement
-          </p>
           <h1 className="mt-1 text-2xl font-semibold text-ardoise-900">Design system</h1>
           <p className="mt-2 max-w-3xl text-corps text-ardoise-600">
             Un écran de supervision affiche trois natures de valeur : ce qui a été{" "}
