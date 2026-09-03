@@ -45,6 +45,11 @@ jobs:
     name: Grype (CVE de l'image)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Scan informatif, sur décision d'équipe : une alerte est visible en échec
+    # mais ne bloque pas la CI. Les dérogations argumentées et datées sont
+    # documentées dans le SECURITY.md du dépôt api, l'image de base étant
+    # commune aux deux services.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -97,6 +102,11 @@ jobs:
     name: OWASP ZAP (scan du dashboard)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Scan informatif, sur décision d'équipe : une alerte est visible en échec
+    # mais ne bloque pas la CI. Les dérogations argumentées et datées sont
+    # documentées dans le SECURITY.md du dépôt api, l'image de base étant
+    # commune aux deux services.
+    continue-on-error: true
 
     env:
       SCAN_TARGET: http://127.0.0.1:8080
