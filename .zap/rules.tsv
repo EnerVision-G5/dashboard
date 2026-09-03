@@ -6,15 +6,17 @@
 # liste ci-dessous est donc la seule chose a relire quand la CI casse sur ZAP.
 # Retirer une ligne suffit a remettre la regle correspondante bloquante.
 #
-# En-tetes de securite absents de nginx.conf. Ils sont poses ici en IGNORE
-# pour que l'ajout du scan n'arrive pas rouge, mais ce sont de vraies
-# lacunes, et corrigeables dans ce depot : nginx.conf est a cote. Ajouter
-# les add_header correspondants puis retirer ces lignes rend la regle
-# bloquante et interdit la regression.
-10020	IGNORE	Anti-clickjacking Header
-10021	IGNORE	X-Content-Type-Options Header Missing
-10038	IGNORE	Content Security Policy Header Not Set
-10063	IGNORE	Permissions Policy Header Not Set
+# Les en-tetes de securite (CSP, X-Content-Type-Options, X-Frame-Options,
+# Permissions-Policy, l'isolation d'origine croisee) sont maintenant poses par
+# security-headers.conf : les quatre IGNORE qui couvraient leur absence ont ete
+# retires plutot que laisses en place a vide, pour que leur retour silencieux
+# refasse echouer le job.
+#
+# style-src 'unsafe-inline' : concession assumee, documentee dans
+# security-headers.conf et docs/EV-48-securite.md. React et Recharts posent
+# des attributs style sur les elements, que la CSP bloquerait sinon ; l'eliminer
+# demanderait de reecrire ces deux dependances, hors de proportion avec le gain.
+10055	IGNORE	CSP: style-src unsafe-inline
 # HSTS : le TLS est termine en amont du conteneur, jamais par ce Nginx. Le
 # scan joint l'image en clair sur la boucle locale du runner, ou l'en-tete
 # n'aurait aucun sens.
