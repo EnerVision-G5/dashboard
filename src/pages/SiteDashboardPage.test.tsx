@@ -19,7 +19,7 @@ vi.mock("recharts", async (importOriginal) => {
 const fetchSites = vi.hoisted(() => vi.fn());
 const fetchReadings = vi.hoisted(() => vi.fn());
 const fetchLatestReading = vi.hoisted(() => vi.fn());
-const fetchPrediction = vi.hoisted(() => vi.fn());
+const fetchPredictions = vi.hoisted(() => vi.fn());
 
 vi.mock("../api/sites", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/sites")>()),
@@ -32,7 +32,7 @@ vi.mock("../api/readings", async (importOriginal) => ({
 }));
 vi.mock("../api/predictions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/predictions")>()),
-  fetchPrediction,
+  fetchPredictions,
 }));
 
 const SITE_A = makeSite({ site_id: "SITE-001", site_name: "Usine Nantes Nord", status: "active" });
@@ -85,7 +85,7 @@ beforeEach(() => {
   fetchLatestReading.mockResolvedValue(
     makeReading({ site_id: "SITE-001", consumption_kw: 2654 }),
   );
-  fetchPrediction.mockResolvedValue(
+  fetchPredictions.mockResolvedValue(
     makePrediction({
       points: [
         makePredictionPoint({
@@ -120,7 +120,7 @@ describe("SiteDashboardPage", () => {
     expect(fetchReadings).toHaveBeenCalledWith(
       expect.objectContaining({ siteId: "SITE-001" }),
     );
-    expect(fetchPrediction).toHaveBeenCalledWith(
+    expect(fetchPredictions).toHaveBeenCalledWith(
       expect.objectContaining({ siteId: "SITE-001" }),
     );
   });
@@ -136,7 +136,7 @@ describe("SiteDashboardPage", () => {
           resolveReadings = resolve;
         }),
     );
-    fetchPrediction.mockResolvedValue(makePrediction({ site_id: "SITE-002", points: [] }));
+    fetchPredictions.mockResolvedValue(makePrediction({ siteId: "SITE-002", points: [] }));
 
     fireEvent.change(screen.getByLabelText("Site"), { target: { value: "SITE-002" } });
 
@@ -159,7 +159,7 @@ describe("SiteDashboardPage", () => {
 
   it("annonce une fenêtre sans donnée plutôt qu'un graphique vide", async () => {
     fetchReadings.mockResolvedValue([]);
-    fetchPrediction.mockResolvedValue(makePrediction({ points: [] }));
+    fetchPredictions.mockResolvedValue(makePrediction({ points: [] }));
 
     renderPage();
 
@@ -189,7 +189,7 @@ describe("SiteDashboardPage", () => {
   });
 
   it("garde les mesures affichées quand seule la prédiction échoue", async () => {
-    fetchPrediction.mockRejectedValue(
+    fetchPredictions.mockRejectedValue(
       new ApiError("Le service d'inférence n'implémente pas encore cet endpoint (501).", 501),
     );
 
@@ -212,11 +212,11 @@ describe("SiteDashboardPage", () => {
       screen.getByText(/La courbe de prédiction provient d'un JSON figé/),
     ).toBeDefined();
     expect(await screen.findByText("Prédiction (kW)")).toBeDefined();
-    expect(fetchPrediction).not.toHaveBeenCalled();
+    expect(fetchPredictions).not.toHaveBeenCalled();
   });
 
   it("ne bascule jamais sur le JSON de démonstration quand l'appel réel échoue", async () => {
-    fetchPrediction.mockRejectedValue(
+    fetchPredictions.mockRejectedValue(
       new ApiError("Le service d'inférence n'implémente pas encore cet endpoint (501).", 501),
     );
 

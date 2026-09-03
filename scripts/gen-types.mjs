@@ -20,10 +20,11 @@ const contractsDir = resolve(
   process.env.CONTRACTS_DIR ?? "../docs/contracts",
 );
 
-const targets = [
-  { contract: "openapi-api.json", output: "src/types/api.d.ts" },
-  { contract: "openapi-predict.json", output: "src/types/predict.d.ts" },
-];
+// Une seule cible : le dashboard ne parle qu'à l'API métier. Les prédictions
+// sont lues sur sa route de lecture, plus sur le service d'inférence, dont le
+// contrat reste la référence entre api et predict mais ne concerne plus le
+// front.
+const targets = [{ contract: "openapi-api.json", output: "src/types/api.d.ts" }];
 
 const missing = targets
   .map(({ contract }) => resolve(contractsDir, contract))

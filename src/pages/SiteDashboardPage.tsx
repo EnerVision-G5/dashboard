@@ -193,7 +193,9 @@ export function SiteDashboardPage() {
                           dans la courbe.
                         </li>
                       )}
-                      {prediction !== null && <li>Modèle : {prediction.model_version}</li>}
+                      {prediction?.modelVersion != null && (
+                        <li>Modèle : {prediction.modelVersion}</li>
+                      )}
                     </ul>
                   </div>
                 )}

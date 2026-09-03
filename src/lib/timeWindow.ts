@@ -30,3 +30,20 @@ export function recentWindow(now: Date, hours: number = DEFAULT_WINDOW_HOURS): T
     endTime: new Date(end).toISOString(),
   };
 }
+
+/**
+ * Construit la fenêtre des `hours` heures à venir à partir de `now`.
+ *
+ * Les prédictions portent sur l'avenir : la fenêtre des mesures, qui remonte
+ * dans le passé, ne les rencontrerait jamais.
+ */
+export function forecastWindow(
+  now: Date,
+  hours: number = DEFAULT_WINDOW_HOURS,
+): TimeWindow {
+  const start = now.getTime();
+  return {
+    startTime: new Date(start).toISOString(),
+    endTime: new Date(start + hours * MS_PER_HOUR).toISOString(),
+  };
+}

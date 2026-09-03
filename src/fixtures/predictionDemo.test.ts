@@ -35,7 +35,7 @@ describe("fixture de démonstration", () => {
   it("reprend l'identifiant du site affiché sans toucher aux valeurs", () => {
     const aligned = buildDemoPrediction("SITE-042", "2026-09-02T00:00:00.000Z");
 
-    expect(aligned.site_id).toBe("SITE-042");
+    expect(aligned.siteId).toBe("SITE-042");
     expect(aligned.points.map((point) => point.predicted_consumption_kw)).toEqual(
       DEMO_PREDICTION.points.map((point) => point.predicted_consumption_kw),
     );
