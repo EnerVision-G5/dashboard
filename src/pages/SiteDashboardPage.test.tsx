@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SiteDashboardPage } from "./SiteDashboardPage";
 import { ApiError } from "../api/http";
+import { AuthContext } from "../auth/AuthContext";
+import type { AuthContextValue } from "../auth/AuthContext";
 import {
   makePrediction,
   makePredictionPoint,
@@ -16,6 +18,7 @@ vi.mock("recharts", async (importOriginal) => {
 
 const fetchSites = vi.hoisted(() => vi.fn());
 const fetchReadings = vi.hoisted(() => vi.fn());
+const fetchLatestReading = vi.hoisted(() => vi.fn());
 const fetchPrediction = vi.hoisted(() => vi.fn());
 
 vi.mock("../api/sites", async (importOriginal) => ({
@@ -25,6 +28,7 @@ vi.mock("../api/sites", async (importOriginal) => ({
 vi.mock("../api/readings", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/readings")>()),
   fetchReadings,
+  fetchLatestReading,
 }));
 vi.mock("../api/predictions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/predictions")>()),
@@ -46,11 +50,41 @@ function readingsOf(siteId: string, kw: number) {
   ];
 }
 
+const SESSION = {
+  token: "entete.charge.signature",
+  claims: { username: "dev.reader", role: "reader" as const, expiresAtMs: null },
+};
+
+/**
+ * Monte l'écran dans un contexte d'authentification déjà ouvert : ces tests
+ * portent sur la supervision, la connexion est couverte par AppRoutes.
+ */
+function renderPage(session: AuthContextValue["session"] = SESSION) {
+  const signOut = vi.fn();
+  const value: AuthContextValue = {
+    session,
+    isAuthenticated: session !== null,
+    isSigningIn: false,
+    error: null,
+    signIn: vi.fn().mockResolvedValue(true),
+    signOut,
+  };
+  render(
+    <AuthContext value={value}>
+      <SiteDashboardPage />
+    </AuthContext>,
+  );
+  return { signOut };
+}
+
 beforeEach(() => {
   vi.stubEnv("VITE_API_BASE_URL", "http://api.test");
   vi.stubEnv("VITE_PREDICT_BASE_URL", "http://predict.test");
   fetchSites.mockResolvedValue([SITE_A, SITE_B]);
   fetchReadings.mockResolvedValue(readingsOf("SITE-001", 100));
+  fetchLatestReading.mockResolvedValue(
+    makeReading({ site_id: "SITE-001", consumption_kw: 2654 }),
+  );
   fetchPrediction.mockResolvedValue(
     makePrediction({
       points: [
@@ -70,14 +104,14 @@ afterEach(() => {
 
 describe("SiteDashboardPage", () => {
   it("affiche un état de chargement avant l'arrivée des sites", () => {
-    render(<SiteDashboardPage />);
+    renderPage();
 
     expect((screen.getByLabelText("Site") as HTMLSelectElement).disabled).toBe(true);
     expect(screen.getByRole("option", { name: "Chargement des sites…" })).toBeDefined();
   });
 
   it("sélectionne le premier site actif et trace les deux séries", async () => {
-    render(<SiteDashboardPage />);
+    renderPage();
 
     await screen.findByRole("heading", { name: "Usine Nantes Nord", level: 2 });
     expect((screen.getByLabelText("Site") as HTMLSelectElement).value).toBe("SITE-001");
@@ -92,7 +126,7 @@ describe("SiteDashboardPage", () => {
   });
 
   it("recharge les deux flux au changement de site sans réutiliser les données du précédent", async () => {
-    render(<SiteDashboardPage />);
+    renderPage();
     await screen.findByText("Consommation réelle (kW)");
 
     let resolveReadings: (value: unknown) => void = () => {};
@@ -127,7 +161,7 @@ describe("SiteDashboardPage", () => {
     fetchReadings.mockResolvedValue([]);
     fetchPrediction.mockResolvedValue(makePrediction({ points: [] }));
 
-    render(<SiteDashboardPage />);
+    renderPage();
 
     expect(
       await screen.findByText(/Aucune donnée à afficher pour ce site/),
@@ -137,7 +171,7 @@ describe("SiteDashboardPage", () => {
   it("signale un référentiel de sites vide", async () => {
     fetchSites.mockResolvedValue([]);
 
-    render(<SiteDashboardPage />);
+    renderPage();
 
     expect(
       await screen.findByText("Aucun site n'est encore supervisé par l'API métier."),
@@ -147,7 +181,7 @@ describe("SiteDashboardPage", () => {
   it("affiche l'erreur de l'API métier sans remplacer les mesures", async () => {
     fetchReadings.mockRejectedValue(new ApiError("L'API métier est injoignable.", null));
 
-    render(<SiteDashboardPage />);
+    renderPage();
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Mesures indisponibles");
@@ -159,7 +193,7 @@ describe("SiteDashboardPage", () => {
       new ApiError("Le service d'inférence n'implémente pas encore cet endpoint (501).", 501),
     );
 
-    render(<SiteDashboardPage />);
+    renderPage();
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Prédiction indisponible");
@@ -170,7 +204,7 @@ describe("SiteDashboardPage", () => {
   it("n'appelle pas le service d'inférence et affiche le bandeau en mode fixture", async () => {
     vi.stubEnv("VITE_PREDICTION_SOURCE", "fixture");
 
-    render(<SiteDashboardPage />);
+    renderPage();
 
     const badge = await screen.findByText("Données de démonstration");
     expect(badge).toBeDefined();
@@ -186,7 +220,7 @@ describe("SiteDashboardPage", () => {
       new ApiError("Le service d'inférence n'implémente pas encore cet endpoint (501).", 501),
     );
 
-    render(<SiteDashboardPage />);
+    renderPage();
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("501");
@@ -207,10 +241,99 @@ describe("SiteDashboardPage", () => {
       makeReading({ timestamp: "2026-09-02T00:02:00Z", consumption_kw: 102 }),
     ]);
 
-    render(<SiteDashboardPage />);
+    renderPage();
 
     expect(
       await screen.findByText(/1 mesure\(s\) absente\(s\) de la source/),
     ).toBeDefined();
+  });
+});
+
+describe("SiteDashboardPage · mise en page de la maquette", () => {
+  it("affiche le titre du produit", () => {
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: "Smart Energy Optimiser", level: 1 }),
+    ).toBeDefined();
+  });
+
+  it("affiche les trois zones de la maquette une fois un site choisi", async () => {
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { name: "Consommation temps réel", level: 2 }),
+    ).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Recommandations", level: 2 })).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Indicateurs", level: 2 })).toBeDefined();
+  });
+
+  it("affiche la puissance souscrite et la localisation du site choisi", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Puissance souscrite 500 kW")).toBeDefined();
+    expect(screen.getByText(/Nantes · usine · active/)).toBeDefined();
+  });
+
+  it("suit le site choisi dans l'en-tête", async () => {
+    fetchLatestReading.mockResolvedValue(makeReading({ site_id: "SITE-002" }));
+    renderPage();
+    await screen.findByText(/Nantes · usine · active/);
+
+    fireEvent.change(screen.getByLabelText("Site"), { target: { value: "SITE-002" } });
+
+    expect(await screen.findByText(/Rezé · usine · active/)).toBeDefined();
+  });
+
+  it("alimente le panneau temps réel avec la dernière mesure du site", async () => {
+    fetchLatestReading.mockResolvedValue(
+      makeReading({
+        site_id: "SITE-001",
+        consumption_kw: 2654,
+        voltage_v: 401.2,
+        current_a: 132.5,
+      }),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("2 654 kW")).toBeDefined();
+    expect(screen.getByText("401,2 V")).toBeDefined();
+    expect(screen.getByText("132,5 A")).toBeDefined();
+    expect(fetchLatestReading).toHaveBeenCalledWith(
+      expect.anything(),
+      "SITE-001",
+      expect.anything(),
+    );
+  });
+
+  it("garde le graphique quand seule la dernière mesure échoue", async () => {
+    fetchLatestReading.mockRejectedValue(new ApiError("Site introuvable.", 404));
+
+    renderPage();
+
+    expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts.some((alert) => alert.textContent === "Site introuvable.")).toBe(true);
+  });
+
+  it("affiche l'utilisateur connecté et son rôle", () => {
+    renderPage();
+
+    expect(screen.getByText("dev.reader · reader")).toBeDefined();
+  });
+
+  it("ferme la session sur demande", () => {
+    const { signOut } = renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Se déconnecter" }));
+
+    expect(signOut).toHaveBeenCalled();
+  });
+
+  it("n'affiche ni utilisateur ni déconnexion hors session", () => {
+    renderPage(null);
+
+    expect(screen.queryByRole("button", { name: "Se déconnecter" })).toBeNull();
   });
 });
