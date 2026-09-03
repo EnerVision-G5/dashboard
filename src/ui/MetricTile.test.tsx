@@ -29,20 +29,30 @@ describe("MetricTile", () => {
     expect(screen.queryByText(MISSING_VALUE)).toBeNull();
   });
 
-  it("rend la valeur dans un output, qui porte les chiffres tabulaires", () => {
+  it("marque la valeur pour les chiffres tabulaires", () => {
     const { container } = render(<MetricTile label="Consommation" value={120} unit="kW" />);
 
-    expect(container.querySelector("output")).not.toBeNull();
+    expect(container.querySelector("[data-valeur]")?.textContent).toBe("120,0 kW");
+  });
+
+  it("n'annonce pas la valeur comme une région live", () => {
+    // <output> porterait un rôle status implicite : cinq tuiles rafraîchies
+    // toutes les trente secondes noieraient un lecteur d'écran sous les
+    // annonces. Une valeur affichée n'est pas un événement.
+    const { container } = render(<MetricTile label="Consommation" value={120} unit="kW" />);
+
+    expect(container.querySelector("output")).toBeNull();
+    expect(container.querySelector("[role='status']")).toBeNull();
   });
 
   it("grossit la valeur principale sans changer les secondaires", () => {
     const { container, rerender } = render(
       <MetricTile label="Consommation" value={120} unit="kW" emphasis="principal" />,
     );
-    expect(container.querySelector("output")?.className).toContain("text-valeur-xl");
+    expect(container.querySelector("[data-valeur]")?.className).toContain("text-valeur-xl");
 
     rerender(<MetricTile label="Tension" value={400} unit="V" />);
-    expect(container.querySelector("output")?.className).toContain("text-valeur-l");
+    expect(container.querySelector("[data-valeur]")?.className).toContain("text-valeur-l");
   });
 
   it("affiche le libellé de la grandeur", () => {

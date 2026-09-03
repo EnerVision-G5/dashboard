@@ -48,18 +48,21 @@ function FieldShell({ id, label, hint, error, required = false, children }: Shel
 
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-corps font-medium text-ardoise-700">
-        {label}
+      {/* L'astérisque est le VOISIN du label, pas son contenu. Dans le label,
+          il entrerait dans son textContent : le champ deviendrait « Identifiant
+          * » pour Testing Library comme pour un lecteur d'écran qui lit le
+          libellé brut. L'obligation est portée par aria-required sur le
+          contrôle ; l'astérisque n'est qu'un repère visuel. */}
+      <div className="flex items-center gap-1">
+        <label htmlFor={id} className="text-corps font-medium text-ardoise-700">
+          {label}
+        </label>
         {required && (
-          <>
-            {" "}
-            <span className="text-alerte-700" aria-hidden>
-              *
-            </span>
-            <span className="sr-only">(obligatoire)</span>
-          </>
+          <span className="text-corps text-alerte-700" aria-hidden>
+            *
+          </span>
         )}
-      </label>
+      </div>
 
       {children({ id, describedBy, invalid: error !== undefined })}
 

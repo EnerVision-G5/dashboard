@@ -113,7 +113,7 @@
    * chaque rafraîchissement — sur un panneau qui se rafraîchit toutes les
    * trente secondes, ce frémissement est épuisant à regarder.
    */
-  :where(output, time, [data-valeur]) {
+  :where(time, [data-valeur]) {
     font-variant-numeric: tabular-nums;
   }
 

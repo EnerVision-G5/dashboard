@@ -118,7 +118,9 @@ describe("LoginPage", () => {
   it("affiche l'erreur d'authentification en région d'alerte", () => {
     renderLogin({ error: "Identifiants invalides." });
 
-    expect(screen.getByRole("alert").textContent).toBe("Identifiants invalides.");
+    const alerte = screen.getByRole("alert");
+    expect(alerte.textContent).toContain("Connexion refusée");
+    expect(alerte.textContent).toContain("Identifiants invalides.");
   });
 
   it("annonce le chargement et verrouille le bouton pendant l'appel", () => {

@@ -48,11 +48,19 @@ describe("TextField", () => {
     expect(document.getElementById(decrit!)?.textContent).toBe("Votre identifiant de connexion.");
   });
 
-  it("annonce l'obligation aux lecteurs d'écran, pas seulement par un astérisque", () => {
+  it("annonce l'obligation par aria-required, pas par un astérisque décoratif", () => {
     render(<TextField label="Identifiant" required />);
 
-    expect(screen.getByLabelText(/obligatoire/)).toBeDefined();
-    expect(screen.getByLabelText(/obligatoire/).getAttribute("aria-required")).toBe("true");
+    const champ = screen.getByLabelText("Identifiant");
+    expect(champ.getAttribute("aria-required")).toBe("true");
+  });
+
+  it("n'allonge pas le nom accessible du champ avec la marque d'obligation", () => {
+    render(<TextField label="Identifiant" required />);
+
+    // L'astérisque est aria-hidden : le champ reste trouvable par son seul
+    // libellé, exactement comme un champ facultatif.
+    expect(screen.getByLabelText("Identifiant")).toBeDefined();
   });
 
   it("génère un identifiant distinct par instance", () => {

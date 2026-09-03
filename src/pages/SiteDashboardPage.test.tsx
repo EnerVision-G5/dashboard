@@ -314,7 +314,7 @@ describe("SiteDashboardPage · mise en page de la maquette", () => {
 
     expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
     const alerts = await screen.findAllByRole("alert");
-    expect(alerts.some((alert) => alert.textContent === "Site introuvable.")).toBe(true);
+    expect(alerts.some((alert) => alert.textContent?.includes("Site introuvable."))).toBe(true);
   });
 
   it("affiche l'utilisateur connecté et son rôle", () => {

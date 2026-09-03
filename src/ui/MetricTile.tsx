@@ -56,15 +56,20 @@ export function MetricTile({
   return (
     <div className="rounded-controle border border-ardoise-200 bg-ardoise-50 px-4 py-3">
       <p className="text-annexe font-medium tracking-wide text-ardoise-600 uppercase">{label}</p>
-      {/* `output` porte les chiffres tabulaires par défaut, posés dans
-          index.css : la règle tient même si quelqu'un oublie la classe. */}
-      <output
-        className={`mt-1 block font-semibold text-ardoise-900 ${
+      {/* Surtout pas un <output> : il porte un rôle ARIA « status » implicite,
+          donc une région live. Cinq tuiles rafraîchies toutes les trente
+          secondes annonceraient alors cinq valeurs à chaque cycle, en continu,
+          à qui utilise un lecteur d'écran. Une valeur affichée n'est pas un
+          événement. `data-valeur` porte les chiffres tabulaires depuis
+          index.css, sans rien annoncer. */}
+      <p
+        data-valeur
+        className={`mt-1 font-semibold text-ardoise-900 ${
           principal ? "text-valeur-xl" : "text-valeur-l"
         }`}
       >
         {format(value, unit, digits)}
-      </output>
+      </p>
     </div>
   );
 }
