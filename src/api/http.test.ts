@@ -37,8 +37,16 @@ describe("toApiError", () => {
     expect(error.message).toContain("n'implémente pas encore cet endpoint (501)");
   });
 
-  it("renvoie vers EV-12 sur un 401", () => {
-    expect(toApiError(httpError(401), "L'API métier").message).toContain("EV-12");
+  it("invite à se reconnecter sur un 401", () => {
+    expect(toApiError(httpError(401), "L'API métier").message).toContain("se reconnecter");
+  });
+
+  it("distingue un rôle insuffisant d'un jeton refusé sur un 403", () => {
+    const error = toApiError(httpError(403, "Rôle writer requis."), "L'API métier");
+
+    expect(error.status).toBe(403);
+    expect(error.message).toContain("Rôle insuffisant");
+    expect(error.message).toContain("Rôle writer requis.");
   });
 
   it("signale un service temporairement indisponible sur un 503", () => {

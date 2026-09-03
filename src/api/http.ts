@@ -56,7 +56,9 @@ function readDetail(data: unknown): string | null {
 function describe(service: string, status: number, detail: string | null): string {
   switch (status) {
     case 401:
-      return `${service} exige une authentification (401). L'authentification du dashboard relève d'EV-12.`;
+      return `${service} a refusé le jeton (401). La session est fermée, il faut se reconnecter.`;
+    case 403:
+      return `Rôle insuffisant pour cette opération sur ${service} (403). ${detail ?? ""}`.trim();
     case 404:
       return detail ?? `Ressource inconnue de ${service} (404).`;
     case 422:
