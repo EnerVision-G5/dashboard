@@ -145,9 +145,13 @@ describe("page de démonstration du design system", () => {
 
     await screen.findByRole("heading", { name: "Design system", level: 1 });
     // La page contient elle-même des exemples de champs et de boutons : on
-    // ancre donc sur un texte qui n'appartient qu'à elle. Le voir prouve
-    // qu'aucune garde n'a renvoyé le visiteur anonyme vers la connexion.
-    expect(screen.getByText(/développement uniquement/)).toBeDefined();
+    // ancre donc sur une section de fond, présente depuis la première version
+    // de la page et peu susceptible d'être retouchée pour son seul libellé.
+    // La voir prouve qu'aucune garde n'a renvoyé le visiteur anonyme vers la
+    // connexion.
+    expect(
+      screen.getByRole("heading", { name: "Ce que le système refuse", level: 2 }),
+    ).toBeDefined();
   });
 
   it("n'est pas déclarée en production, où son adresse retombe sur le dashboard", async () => {
