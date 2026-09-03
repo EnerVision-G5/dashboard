@@ -98,6 +98,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sites/{site_id}/predictions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lister les prédictions d'un site sur une fenêtre de temps */
+        get: operations["list_predictions_api_v1_sites__site_id__predictions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sites/{site_id}/readings": {
         parameters: {
             query?: never;
@@ -344,6 +361,57 @@ export interface components {
              * @description Nombre total d'éléments disponibles pour la requête.
              */
             total: number;
+        };
+        /**
+         * PredictionPointOut
+         * @description Point prédit, tel qu'il a été archivé.
+         */
+        PredictionPointOut: {
+            /**
+             * Generated At
+             * Format: date-time
+             * @description Horodatage de production de la prévision par le service d'inférence, ISO 8601 UTC. Distinct de l'horodatage cible.
+             */
+            generated_at: string;
+            /**
+             * Lower Bound Kw
+             * @description Borne basse de l'intervalle de confiance, nulle si non calculée.
+             */
+            lower_bound_kw: number | null;
+            /**
+             * Model Version
+             * @description Version du modèle ayant produit ce point.
+             */
+            model_version: string;
+            /**
+             * Predicted Consumption Kw
+             * @description Puissance prédite en kilowatts.
+             */
+            predicted_consumption_kw: number;
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description Horodatage cible de la prévision, ISO 8601 UTC.
+             */
+            timestamp: string;
+            /**
+             * Upper Bound Kw
+             * @description Borne haute de l'intervalle de confiance, nulle si non calculée.
+             */
+            upper_bound_kw: number | null;
+        };
+        /**
+         * PredictionsPage
+         * @description Page de prédictions accompagnée de ses métadonnées.
+         */
+        PredictionsPage: {
+            /**
+             * Items
+             * @description Prédictions de la page, triées par horodatage cible croissant.
+             */
+            items: components["schemas"]["PredictionPointOut"][];
+            /** @description Métadonnées de pagination de la requête. */
+            meta: components["schemas"]["PaginationMeta"];
         };
         /**
          * ReadingsPage
@@ -595,6 +663,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SiteOut"];
+                };
+            };
+            /** @description Jeton JWT absent, expiré ou invalide. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Site inconnu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Paramètres de requête invalides. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_predictions_api_v1_sites__site_id__predictions_get: {
+        parameters: {
+            query: {
+                /** @description Borne inférieure incluse de la fenêtre, ISO 8601 UTC. */
+                start_time: string;
+                /** @description Borne supérieure incluse de la fenêtre, ISO 8601 UTC. */
+                end_time: string;
+                /** @description Taille de page, entre 1 et 1000. */
+                limit?: number;
+                /** @description Décalage appliqué au début de la collection. */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Identifiant du site. */
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PredictionsPage"];
                 };
             };
             /** @description Jeton JWT absent, expiré ou invalide. */
