@@ -4,7 +4,21 @@ dist-ssr
 *.local
 .git
 .gitignore
+.github
 .vscode
 .idea
 .DS_Store
 npm-debug.log*
+
+# Config locale : ne doit jamais entrer dans le contexte de build. Vite charge
+# .env automatiquement au build et y bakerait des valeurs propres au poste.
+.env
+.env.*
+!.env.example
+
+# Non nécessaire au build de l'image
+Dockerfile*
+compose*.yaml
+compose*.yml
+Makefile
+README.md
