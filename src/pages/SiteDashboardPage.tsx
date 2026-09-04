@@ -2,6 +2,9 @@
  * Écran de supervision d'un site, mis en page d'après la maquette
  * « Smart Energy Optimiser » et repris sur le design system (EV-47).
  *
+ * L'identité du produit, l'utilisateur et la déconnexion sont portés par la
+ * navigation principale d'EV-50 : cette page commence à son en-tête de site.
+ *
  * Trois zones sous l'en-tête, comme la maquette les nomme :
  *   - Consommation temps réel, alimentée par GET /readings/latest ;
  *   - Recommandations, sans donnée tant que le contrat n'en publie pas ;
@@ -18,35 +21,11 @@ import { RealtimeConsumptionPanel } from "../components/RealtimeConsumptionPanel
 import { RecommendationsPanel } from "../components/RecommendationsPanel";
 import { SiteSelector } from "../components/SiteSelector";
 import { countMissingReadings } from "../lib/series";
-import { useAuth } from "../auth/useAuth";
 import { useLatestReading } from "../hooks/useLatestReading";
 import { useSiteSeries } from "../hooks/useSiteSeries";
 import { useSites } from "../hooks/useSites";
-import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { EmptyState, ErrorState, LoadingState } from "../ui/states";
-
-/** Bandeau supérieur : identité du produit, utilisateur, déconnexion. */
-function AppHeader() {
-  const { session, signOut } = useAuth();
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
-      <h1 className="text-titre-page font-semibold text-ardoise-900">Smart Energy Optimiser</h1>
-      {session !== null && (
-        <div className="flex items-center gap-3 text-corps text-ardoise-600">
-          <span>
-            {session.claims.username}
-            {session.claims.role !== null && ` · ${session.claims.role}`}
-          </span>
-          <Button variant="secondaire" size="sm" onClick={signOut}>
-            Se déconnecter
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function SiteDashboardPage() {
   const { sites, selectedSite, selectSite, isLoading: sitesLoading, error: sitesError } =
@@ -71,12 +50,10 @@ export function SiteDashboardPage() {
   const missingReadings = countMissingReadings(points);
 
   return (
-    <div className="min-h-screen bg-ardoise-50">
+    <>
       <header className="border-b border-ardoise-200 bg-white">
         <div className="mx-auto max-w-7xl">
-          <AppHeader />
-
-          <div className="flex flex-col gap-4 px-4 pb-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
+          <div className="flex flex-col gap-4 px-4 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
             {/* Le sélecteur ne s'étire pas indéfiniment sur un grand écran :
                 une liste déroulante de 1 200 px de large est illisible. */}
             <div className="w-full sm:max-w-sm">
@@ -101,7 +78,7 @@ export function SiteDashboardPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6">
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6">
         {predictionSource === "fixture" && (
           <DemoDataBadge
             series="La courbe de prédiction provient d'un JSON figé, pas du service d'inférence"
@@ -195,6 +172,6 @@ export function SiteDashboardPage() {
           </>
         )}
       </main>
-    </div>
+    </>
   );
 }
