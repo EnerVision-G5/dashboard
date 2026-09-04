@@ -16,11 +16,13 @@
  */
 
 import { ConsumptionPredictionChart } from "../components/ConsumptionPredictionChart";
+import { DataQualityBanner } from "../components/DataQualityBanner";
 import { DemoDataBadge } from "../components/DemoDataBadge";
 import { RealtimeConsumptionPanel } from "../components/RealtimeConsumptionPanel";
 import { RecommendationsPanel } from "../components/RecommendationsPanel";
 import { SiteSelector } from "../components/SiteSelector";
 import { countMissingReadings } from "../lib/series";
+import { useDataHealth } from "../hooks/useDataHealth";
 import { useLatestReading } from "../hooks/useLatestReading";
 import { useSiteSeries } from "../hooks/useSiteSeries";
 import { useSites } from "../hooks/useSites";
@@ -44,6 +46,17 @@ export function SiteDashboardPage() {
     isLoading: latestLoading,
     error: latestError,
   } = useLatestReading(selectedSite?.site_id ?? null);
+  const {
+    health,
+    isLoading: healthLoading,
+    indicatorsError,
+    sensorsError,
+  } = useDataHealth(
+    selectedSite?.site_id ?? null,
+    // Le référentiel est déjà à l'écran : le bandeau nomme les sites avec
+    // lui plutôt que de relire /sites pour la même information.
+    (siteId) => sites.find((site) => site.site_id === siteId)?.site_name ?? siteId,
+  );
 
   const hasActual = points.some((point) => point.actualKw !== null);
   const hasPredicted = points.some((point) => point.predictedKw !== null);
@@ -83,6 +96,17 @@ export function SiteDashboardPage() {
           <DemoDataBadge
             series="La courbe de prédiction provient d'un JSON figé, pas du service d'inférence"
             reason="Les mesures, elles, viennent bien de l'API métier."
+          />
+        )}
+
+        {/* Le bandeau passe avant tout le reste : il qualifie ce que les
+            panneaux du dessous affichent, et se lit donc en premier (EV-18). */}
+        {selectedSite !== null && (
+          <DataQualityBanner
+            health={health}
+            isLoading={healthLoading}
+            indicatorsError={indicatorsError}
+            sensorsError={sensorsError}
           />
         )}
 

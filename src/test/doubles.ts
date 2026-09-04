@@ -8,6 +8,8 @@
  */
 
 import type { AxiosInstance } from "axios";
+import type { SiteIndicators } from "../api/indicators";
+import type { SensorHealth } from "../api/sensors";
 import type { EnergyReading } from "../api/readings";
 import type {
   Prediction,
@@ -86,6 +88,10 @@ export function makeReading(overrides: Partial<EnergyReading> = {}): EnergyReadi
     null_reasons: [],
     data_quality: "good",
     imputation_method: "none",
+    // Contrat 1.5.0 : une mesure peut être écartée des agrégats, avec son
+    // motif. Le double part d'une mesure retenue, l'exclusion étant l'exception.
+    excluded: false,
+    exclusion_reason: null,
     ...overrides,
   };
 }
@@ -113,6 +119,77 @@ export function makePrediction(overrides: Partial<Prediction> = {}): Prediction 
     modelVersion: "test-1",
     generatedAt: "2026-09-02T00:00:00Z",
     points: [makePredictionPoint()],
+    ...overrides,
+  };
+}
+
+/**
+ * Indicateurs de confiance d'un site, tels que le contrat 1.5.0 les publie.
+ *
+ * Le double part d'un site sain : fenêtre fraîche, entièrement qualifiée,
+ * aucune dégradation. Chaque test n'écrase donc que ce qu'il veut démontrer.
+ */
+export function makeSiteIndicators(
+  overrides: Partial<SiteIndicators> = {},
+): SiteIndicators {
+  return {
+    site_id: "SITE-001",
+    generated_at: "2026-09-02T12:00:00Z",
+    window_hours: 24,
+    ingestion: {
+      last_measure_at: "2026-09-02T11:59:00Z",
+      last_ingested_at: "2026-09-02T11:59:30Z",
+      measure_age_seconds: 60,
+      ingestion_lag_seconds: 30,
+      is_stale: false,
+      stale_threshold_seconds: 300,
+      collector: null,
+      ...overrides.ingestion,
+    },
+    quality: {
+      window_start: "2026-09-01T12:00:00Z",
+      window_end: "2026-09-02T12:00:00Z",
+      total: 1440,
+      qualified: 1440,
+      qualified_ratio: 1,
+      not_good: 0,
+      degraded: 0,
+      imputed: 0,
+      sensor_failure: 0,
+      degraded_ratio: 0,
+      threshold: 0.1,
+      exceeds_threshold: false,
+      ...overrides.quality,
+    },
+    accuracy: {
+      window_start: "2026-09-01T12:00:00Z",
+      window_end: "2026-09-02T12:00:00Z",
+      paired_points: 24,
+      bounded_points: 24,
+      mae_kw: 8,
+      bias_kw: -2,
+      mean_actual_kw: 120,
+      within_bounds_ratio: 0.9,
+      drift: false,
+      drift_threshold_ratio: 0.2,
+      model_versions: ["test-1"],
+      ...overrides.accuracy,
+    },
+    ...overrides,
+  };
+}
+
+/** État d'un capteur, tel que la source le déclare. */
+export function makeSensorHealth(
+  overrides: Partial<SensorHealth> = {},
+): SensorHealth {
+  return {
+    site_id: "SITE-001",
+    capteur: "consumption",
+    statut: "ok",
+    overall: "ok",
+    releve_le: "2026-09-02T11:59:00Z",
+    failing_until: null,
     ...overrides,
   };
 }
