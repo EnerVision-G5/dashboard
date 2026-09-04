@@ -44,6 +44,29 @@ const DATE_TIME_FORMAT = new Intl.DateTimeFormat("fr-FR", {
   timeStyle: "short",
 });
 
+/** Jour et heure sans les minutes, pour les graduations d'une longue période. */
+const DAY_HOUR_FORMAT = new Intl.DateTimeFormat("fr-FR", {
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+});
+
+/**
+ * Au-delà de deux jours, une graduation « 14:30 » devient ambiguë : elle peut
+ * désigner cinq jours différents. Le format de l'axe suit donc la profondeur
+ * réellement affichée (EV-53).
+ */
+const AMBIGUOUS_AFTER_HOURS = 48;
+
+function axisFormatter(points: readonly ChartPoint[]): (value: number) => string {
+  const first = points[0]?.timestamp;
+  const last = points.at(-1)?.timestamp;
+  const hours =
+    first === undefined || last === undefined ? 0 : (last - first) / (60 * 60 * 1000);
+  const format = hours > AMBIGUOUS_AFTER_HOURS ? DAY_HOUR_FORMAT : TIME_FORMAT;
+  return (value: number) => format.format(new Date(value));
+}
+
 const QUALITY_LABELS: Record<NonNullable<ChartPoint["dataQuality"]>, string> = {
   good: "bonne",
   partial: "partielle",
@@ -102,6 +125,8 @@ export function ConsumptionPredictionChart({
   points,
   description,
 }: ConsumptionPredictionChartProps) {
+  const formatTick = axisFormatter(points);
+
   return (
     <figure className="m-0">
       <figcaption className="sr-only">{description}</figcaption>
@@ -114,7 +139,7 @@ export function ConsumptionPredictionChart({
               type="number"
               scale="time"
               domain={["dataMin", "dataMax"]}
-              tickFormatter={(value: number) => TIME_FORMAT.format(new Date(value))}
+              tickFormatter={formatTick}
               stroke={token("axe")}
               tick={{ fontSize: 12 }}
             />

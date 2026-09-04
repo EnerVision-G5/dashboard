@@ -8,7 +8,8 @@
  * Trois zones sous l'en-tête, comme la maquette les nomme :
  *   - Consommation temps réel, alimentée par GET /readings/latest ;
  *   - Recommandations, servies par l'API depuis EV-54 ;
- *   - Indicateurs, qui porte le graphique consommation / prédiction d'EV-16.
+ *   - Indicateurs, qui porte le graphique consommation / prédiction d'EV-16 et
+ *     le sélecteur de période d'EV-53.
  *
  * Une seconde rangée porte les diagnostics d'EV-52 : ingestion, écart
  * prédiction/réel, et mesures écartées avec les pannes de capteur. Une
@@ -32,8 +33,10 @@ import { RealtimeConsumptionPanel } from "../components/RealtimeConsumptionPanel
 import { RecommendationsPanel } from "../components/RecommendationsPanel";
 import { SiteActionsPanel } from "../components/SiteActionsPanel";
 import { SiteSelector } from "../components/SiteSelector";
+import { TimeRangePicker } from "../components/TimeRangePicker";
 import { SpikeHistoryPanel } from "../components/SpikeHistoryPanel";
 import { countMissingReadings, summarizeExclusions } from "../lib/series";
+import { DEFAULT_WINDOW_HOURS, recentWindow } from "../lib/timeWindow";
 import { useDataHealth } from "../hooks/useDataHealth";
 import { useLatestReading } from "../hooks/useLatestReading";
 import { useRecommendations } from "../hooks/useRecommendations";
@@ -42,6 +45,7 @@ import { useSiteDiagnostics } from "../hooks/useSiteDiagnostics";
 import { useSpikeHistory } from "../hooks/useSpikeHistory";
 import { useSiteSeries } from "../hooks/useSiteSeries";
 import { useSites } from "../hooks/useSites";
+import { useState } from "react";
 import { Card } from "../ui/Card";
 import { EmptyState, ErrorState, LoadingState } from "../ui/states";
 
@@ -54,6 +58,11 @@ export function SiteDashboardPage() {
     isLoading: sitesLoading,
     error: sitesError,
   } = useSites();
+  // La fenêtre est fixée une fois, à l'ouverture, puis change sur demande.
+  // La recalculer à chaque rendu relancerait les appels sans fin.
+  const [timeWindow, setTimeWindow] = useState(() =>
+    recentWindow(new Date(), DEFAULT_WINDOW_HOURS),
+  );
   const {
     points,
     prediction,
@@ -62,7 +71,7 @@ export function SiteDashboardPage() {
     predictionError,
     windowHours,
     predictionSource,
-  } = useSiteSeries(selectedSite?.site_id ?? null);
+  } = useSiteSeries(selectedSite?.site_id ?? null, timeWindow);
   const {
     reading: latestReading,
     isLoading: latestLoading,
@@ -208,9 +217,18 @@ export function SiteDashboardPage() {
               <div className="md:col-span-2 lg:col-span-6">
                 <Card
                   title="Indicateurs"
-                  description={`Consommation et prédiction sur les ${windowHours} dernières heures`}
+                  description={`Consommation et prédiction sur ${windowHours} h`}
                 >
                   <div className="flex flex-col gap-4">
+                    {/* La clé remonte le sélecteur quand la fenêtre change
+                        par un bouton de durée rapide : ses champs repartent
+                        alors de la période appliquée. */}
+                    <TimeRangePicker
+                      key={`${timeWindow.startTime}-${timeWindow.endTime}`}
+                      window={timeWindow}
+                      onApply={setTimeWindow}
+                    />
+
                     {readingsError !== null && (
                       <ErrorState title="Mesures indisponibles">{readingsError}</ErrorState>
                     )}
@@ -223,14 +241,13 @@ export function SiteDashboardPage() {
                         Chargement des données du site {selectedSite.site_name}…
                       </LoadingState>
                     ) : points.length === 0 ? (
-                      <EmptyState>
-                        Aucune donnée à afficher pour ce site sur les {windowHours} dernières
-                        heures.
+                      <EmptyState detail="Une autre période peut être appliquée ci-dessus.">
+                        Aucune donnée à afficher pour ce site sur cette période.
                       </EmptyState>
                     ) : (
                       <ConsumptionPredictionChart
                         points={points}
-                        description={`Consommation réelle et prédiction du site ${selectedSite.site_name}, en kilowatts, sur les ${windowHours} dernières heures.`}
+                        description={`Consommation réelle et prédiction du site ${selectedSite.site_name}, en kilowatts, du ${new Date(timeWindow.startTime).toLocaleString("fr-FR")} au ${new Date(timeWindow.endTime).toLocaleString("fr-FR")}.`}
                       />
                     )}
 
