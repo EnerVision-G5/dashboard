@@ -98,10 +98,13 @@ Vérifié en servant le build de production derrière cette configuration, API s
 la même origine : le dashboard complet, graphique Recharts compris, s'affiche
 **sans une seule violation** en console.
 
-> **Piège de déploiement.** `connect-src 'self'` suppose l'architecture cible,
-> dashboard et API sur la même origine derrière Traefik. Si `VITE_API_BASE_URL`
-> pointe une autre origine, il faut l'ajouter à la directive, faute de quoi le
-> navigateur bloquera **tous** les appels.
+> **Corrigé depuis.** Ce document supposait le dashboard et l'API sur la même
+> origine derrière Traefik. C'est faux : le rôle Ansible `applications` les
+> route sur deux hôtes distincts (`Host(app.…)` et `Host(api.…)`), donc deux
+> origines, et `connect-src 'self'` bloquait en réalité tous les appels en
+> production. Les origines autorisées se déclarent désormais au déploiement
+> dans la variable d'environnement `CSP_CONNECT_SRC`, substituée dans la CSP au
+> démarrage du conteneur. Voir le README, section Sécurité.
 
 ## 4. Fuite d'information
 
@@ -146,7 +149,7 @@ Le scan Grype bloquant reste à câbler en CI (EV-31).
 |---|---|---|---|
 | R1 | Délivrer le jeton en cookie `httpOnly` + `Secure` + `SameSite=Strict` plutôt qu'en corps JSON. C'est la seule façon de le mettre hors d'atteinte du JavaScript, et cela rendrait la question du stockage sans objet. Demande une PR de contrat. | api + contrat | haute |
 | R2 | Publier un flux de rafraîchissement (`refresh_token`). Sans lui, aucune session longue n'est possible sans garder le mot de passe en mémoire, ce que le dashboard refuse de faire. | api + contrat | moyenne |
-| R3 | Vérifier `connect-src` au premier déploiement réel, selon l'origine servie par Traefik. | infra + DevOps | haute |
+| R3 | Renseigner `CSP_CONNECT_SRC` (dashboard) et `CORS_ALLOWED_ORIGINS` (api) au déploiement : les deux doivent concorder, sinon le navigateur bloque. | infra + DevOps | haute |
 | R4 | Terminer HSTS et la redirection HTTPS côté Traefik. | infra | moyenne |
 | R5 | Câbler Grype et la quality gate SonarQube en CI (EV-31). | DevOps | moyenne |
 

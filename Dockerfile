@@ -35,16 +35,30 @@ USER root
 RUN apk update && apk upgrade --no-cache
 USER nginx
 
-# Configuration : fallback SPA + cache des assets + /healthz. Les en-têtes de
-# sécurité vivent dans security-headers.conf, réinclus par nginx.conf en
-# chemin absolu dans chaque location qui pose son propre add_header — un
-# chemin relatif s'y résout contre le préfixe /etc/nginx/, pas contre le
-# répertoire du fichier qui l'inclut, ce qui a fait échouer une première
-# tentative. Deux COPY plutôt qu'un seul avec plusieurs sources : ce dernier
-# imposerait une destination-répertoire et interdirait de renommer nginx.conf
-# au passage.
+# Configuration : fallback SPA + cache des assets + /healthz.
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY security-headers.conf /etc/nginx/conf.d/security-headers.conf
+
+# Les en-têtes de sécurité sont un modèle, pas un fichier figé : l'entrée de
+# l'image passe /etc/nginx/templates/*.template à envsubst au démarrage du
+# conteneur, ce qui permet de décider les origines autorisées par connect-src
+# au déploiement plutôt qu'au build. L'image est construite une fois par commit
+# et déployée telle quelle sur des environnements dont les domaines diffèrent :
+# figer la CSP au build imposerait une image par environnement.
+COPY security-headers.conf.template /etc/nginx/templates/security-headers.conf.template
+
+# Sortie de la substitution dans /etc/nginx/ et non le défaut /etc/nginx/conf.d/ :
+# ce dernier est chargé en bloc par `include /etc/nginx/conf.d/*.conf` du
+# nginx.conf de base, et le fichier d'en-têtes s'y appliquerait aussi au
+# contexte http, en plus des trois endroits qui l'incluent délibérément.
+ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx
+
+# Origines supplémentaires autorisées par connect-src, en plus de 'self'.
+# DÉCLARÉE ICI MÊME VIDE, et c'est indispensable : envsubst ne substitue que
+# les variables réellement définies dans l'environnement, et laisserait sinon
+# le littéral « ${CSP_CONNECT_SRC} » dans la CSP produite. Vide, le dashboard
+# ne peut appeler que sa propre origine — un défaut qui échoue en se fermant.
+# À renseigner au déploiement, voir security-headers.conf.template.
+ENV CSP_CONNECT_SRC=""
 
 # Uniquement le résultat du build, rien d'autre du dépôt.
 COPY --from=build /app/dist /usr/share/nginx/html
