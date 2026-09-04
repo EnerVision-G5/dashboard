@@ -1,0 +1,7 @@
+// Configuration du dashboard, produite au démarrage du conteneur (EV-64).
+// Fichier SERVI AU NAVIGATEUR : le garder maigre, et n'y mettre aucun secret.
+// Le pourquoi du mécanisme est dans le Dockerfile et le README.
+window.__ENERVISION_CONFIG__ = {
+  apiBaseUrl: "${API_BASE_URL}",
+  predictionSource: "${PREDICTION_SOURCE}",
+};

@@ -46,6 +46,12 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # figer la CSP au build imposerait une image par environnement.
 COPY security-headers.conf.template /etc/nginx/templates/security-headers.conf.template
 
+# Même mécanisme pour les adresses de service : Vite les figerait au build,
+# alors que l'image est construite une fois par commit puis déployée telle
+# quelle sur des environnements dont les domaines diffèrent. Servi sur
+# /config.js et chargé par index.html avant le bundle.
+COPY config.js.template /etc/nginx/templates/config.js.template
+
 # Sortie de la substitution dans /etc/nginx/ et non le défaut /etc/nginx/conf.d/ :
 # ce dernier est chargé en bloc par `include /etc/nginx/conf.d/*.conf` du
 # nginx.conf de base, et le fichier d'en-têtes s'y appliquerait aussi au
@@ -59,6 +65,13 @@ ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx
 # ne peut appeler que sa propre origine — un défaut qui échoue en se fermant.
 # À renseigner au déploiement, voir security-headers.conf.template.
 ENV CSP_CONNECT_SRC=""
+
+# Adresses de service lues par l'application au démarrage. Déclarées ici même
+# vides, pour la même raison que CSP_CONNECT_SRC : envsubst laisserait sinon
+# le littéral « ${...} » dans config.js. Vides, l'application retombe sur
+# import.meta.env, c'est-à-dire le .env du poste de développement.
+ENV API_BASE_URL=""
+ENV PREDICTION_SOURCE=""
 
 # Uniquement le résultat du build, rien d'autre du dépôt.
 COPY --from=build /app/dist /usr/share/nginx/html
