@@ -33,6 +33,10 @@ export interface ChartPoint {
   dataQuality: EnergyReading["data_quality"] | null;
   /** Méthode d'imputation appliquée par l'ETL. */
   imputationMethod: EnergyReading["imputation_method"] | null;
+  /** Vrai si la mesure a été écartée des calculs agrégés (contrat 1.5.0). */
+  excluded: boolean;
+  /** Motif de la mise à l'écart, nul si la mesure est retenue. */
+  exclusionReason: string | null;
   /** Borne basse de l'intervalle de confiance, `null` si non calculée. */
   lowerBoundKw: number | null;
   /** Borne haute de l'intervalle de confiance, `null` si non calculée. */
@@ -48,6 +52,8 @@ function emptyPoint(isoTimestamp: string, timestamp: number): ChartPoint {
     imputedKw: null,
     dataQuality: null,
     imputationMethod: null,
+    excluded: false,
+    exclusionReason: null,
     lowerBoundKw: null,
     upperBoundKw: null,
   };
@@ -88,6 +94,11 @@ export function buildChartSeries(
     point.imputedKw = reading.consumption_kw_imputed;
     point.dataQuality = reading.data_quality;
     point.imputationMethod = reading.imputation_method;
+    // Une mesure écartée reste servie, et reste tracée : c'est au lecteur de
+    // savoir qu'elle ne compte pas dans les agrégats, pas à l'écran de la
+    // cacher. Le contrat est explicite là-dessus.
+    point.excluded = reading.excluded ?? false;
+    point.exclusionReason = reading.exclusion_reason ?? null;
   }
 
   for (const prediction of predictionPoints) {
@@ -106,4 +117,48 @@ export function buildChartSeries(
 /** Nombre de mesures dont la consommation réelle est absente. */
 export function countMissingReadings(points: readonly ChartPoint[]): number {
   return points.filter((point) => point.dataQuality !== null && point.actualKw === null).length;
+}
+
+/** Mesures écartées d'une fenêtre, regroupées par motif. */
+export interface ExclusionSummary {
+  /** Nombre total de mesures écartées. */
+  total: number;
+  /** Motifs rencontrés, du plus fréquent au moins fréquent. */
+  reasons: { reason: string; count: number }[];
+  /** Horodatage de la première mesure écartée, ISO 8601. */
+  firstAt: string | null;
+  /** Horodatage de la dernière mesure écartée, ISO 8601. */
+  lastAt: string | null;
+}
+
+/** Motif affiché quand la source écarte une mesure sans dire pourquoi. */
+export const UNSPECIFIED_EXCLUSION_REASON = "motif non précisé par la source";
+
+/**
+ * Résume les mesures écartées d'une fenêtre.
+ *
+ * Une liste de 1 440 lignes n'apprendrait rien : ce qui se décide, c'est
+ * combien de mesures ont été retirées des agrégats, pourquoi, et sur quelle
+ * plage. Un motif manquant est nommé plutôt qu'ignoré — le contrat autorise
+ * une mesure écartée sans motif, et taire ce cas laisserait un total sans
+ * explication.
+ */
+export function summarizeExclusions(points: readonly ChartPoint[]): ExclusionSummary {
+  const excluded = points.filter((point) => point.excluded);
+  const counts = new Map<string, number>();
+  for (const point of excluded) {
+    const reason = point.exclusionReason ?? UNSPECIFIED_EXCLUSION_REASON;
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  }
+
+  return {
+    total: excluded.length,
+    // Les points sont déjà triés par horodatage croissant : les bornes de la
+    // plage se lisent donc aux extrémités, sans retrier.
+    reasons: [...counts.entries()]
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((left, right) => right.count - left.count),
+    firstAt: excluded[0]?.isoTimestamp ?? null,
+    lastAt: excluded.at(-1)?.isoTimestamp ?? null,
+  };
 }

@@ -9,7 +9,7 @@
 
 import type { AxiosInstance } from "axios";
 import type { SiteIndicators } from "../api/indicators";
-import type { SensorHealth } from "../api/sensors";
+import type { SensorFailure, SensorHealth } from "../api/sensors";
 import type { EnergyReading } from "../api/readings";
 import type {
   Prediction,
@@ -190,6 +190,21 @@ export function makeSensorHealth(
     overall: "ok",
     releve_le: "2026-09-02T11:59:00Z",
     failing_until: null,
+    ...overrides,
+  };
+}
+
+/** Épisode de panne de capteur, tel que l'API le borne. */
+export function makeSensorFailure(
+  overrides: Partial<SensorFailure> = {},
+): SensorFailure {
+  return {
+    site_id: "SITE-001",
+    capteur: "temperature",
+    started_at: "2026-09-02T08:00:00Z",
+    ended_at: "2026-09-02T09:30:00Z",
+    failing_until: null,
+    ongoing: false,
     ...overrides,
   };
 }

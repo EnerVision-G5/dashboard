@@ -28,8 +28,19 @@ export type QualityIndicator = components["schemas"]["QualityIndicatorOut"];
 /** Nom du service affiché dans les messages d'erreur. */
 export const API_SERVICE_LABEL = "L'API métier";
 
+/** Écart entre les prévisions servies et la consommation réellement mesurée. */
+export type AccuracyIndicator = components["schemas"]["AccuracyIndicatorOut"];
+
+/** Ce que le collecteur dit de lui-même pour un site. */
+export type CollectorState = components["schemas"]["CollectorStateOut"];
+
 /** Chemin des indicateurs de tout le parc dans le contrat gelé. */
 export const INDICATORS_PATH = "/api/v1/indicators";
+
+/** Chemin des indicateurs d'un seul site. */
+export function siteIndicatorsPath(siteId: string): string {
+  return `/api/v1/sites/${encodeURIComponent(siteId)}/indicators`;
+}
 
 /**
  * Profondeur de fenêtre demandée aux indicateurs, en heures.
@@ -54,6 +65,35 @@ export async function fetchIndicators({
 }: FetchIndicatorsOptions): Promise<SiteIndicators[]> {
   try {
     const response = await client.get<SiteIndicators[]>(INDICATORS_PATH, {
+      params: { window_hours: windowHours },
+      signal,
+    });
+    return response.data;
+  } catch (error) {
+    throw toApiError(error, API_SERVICE_LABEL);
+  }
+}
+
+interface FetchSiteIndicatorsOptions extends FetchIndicatorsOptions {
+  siteId: string;
+}
+
+/**
+ * Lit les indicateurs de confiance d'un seul site.
+ *
+ * Le bandeau d'EV-18 interroge le parc entier ; les panneaux d'EV-52 ne
+ * parlent que du site affiché, et la route dédiée évite de trier sept sites
+ * pour en garder un — surtout, elle renvoie un 404 sur un site inconnu, là où
+ * la liste du parc renverrait simplement une absence muette.
+ */
+export async function fetchSiteIndicators({
+  client,
+  siteId,
+  windowHours = INDICATORS_WINDOW_HOURS,
+  signal,
+}: FetchSiteIndicatorsOptions): Promise<SiteIndicators> {
+  try {
+    const response = await client.get<SiteIndicators>(siteIndicatorsPath(siteId), {
       params: { window_hours: windowHours },
       signal,
     });
