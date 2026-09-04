@@ -104,10 +104,12 @@ de `src/config/env.ts` connaissent les bases, les composants ne voient que
 
 ### Proxy de développement et CORS
 
-L'API métier **ne publie aucun en-tête `Access-Control-*`**. Appelée
-directement depuis `http://localhost:5173`, sa réponse est bloquée par le
-navigateur. Pour une recette locale, faire passer les appels par l'origine de
-Vite :
+L'API métier publie ses en-têtes `Access-Control-*` sur les seules origines
+listées dans sa variable `CORS_ALLOWED_ORIGINS`. Tant qu'elle n'y connaît pas
+`http://localhost:5173`, sa réponse est bloquée par le navigateur. Deux voies
+pour une recette locale — soit renseigner cette variable côté API, soit faire
+passer les appels par l'origine de Vite, ce qui évite complètement le
+cross-origin :
 
 ```bash
 VITE_API_BASE_URL=/proxy/api
@@ -116,8 +118,11 @@ VITE_DEV_PROXY_API_TARGET=http://localhost:8080
 VITE_DEV_PROXY_PREDICT_TARGET=http://localhost:8001
 ```
 
-Ce proxy ne concerne que `npm run dev`. En production, l'API doit autoriser
-l'origine du dashboard, ou le servir derrière le même nom de domaine.
+Ce proxy ne concerne que `npm run dev` : l'image de production est servie par
+Nginx, qui ne proxifie rien. En production, les appels sont donc bel et bien
+cross-origin, et les deux côtés doivent se déclarer mutuellement —
+`CSP_CONNECT_SRC` côté dashboard, `CORS_ALLOWED_ORIGINS` côté API, voir
+[Sécurité](#sécurité).
 
 ## Authentification
 
@@ -417,13 +422,42 @@ d'information, dépendances, et cinq recommandations.
 
 Deux points à retenir avant de déployer :
 
-- la **CSP** de `nginx.conf` pose `connect-src 'self'`, ce qui suppose le
-  dashboard et l'API sur la même origine derrière Traefik. Si
-  `VITE_API_BASE_URL` pointe une autre origine, il faut l'ajouter à la
-  directive, sinon le navigateur bloquera **tous** les appels ;
+- la **CSP** restreint `connect-src` aux origines déclarées. Traefik route le
+  dashboard et l'API sur **deux hôtes distincts** (`app.` et `api.`), donc deux
+  origines : sans configuration, le navigateur bloque tous les appels. Les
+  origines autorisées se posent au déploiement dans la variable
+  d'environnement **`CSP_CONNECT_SRC`** du conteneur, voir
+  [Origines autorisées](#origines-autorisées-csp_connect_src) ;
 - les variables `VITE_` sont remplacées par leur valeur **à la compilation** et
   se lisent en clair dans le bundle livré. Ce sont des adresses de service, et
   aucune ne doit jamais porter de secret.
+
+### Origines autorisées (`CSP_CONNECT_SRC`)
+
+La CSP est produite au **démarrage du conteneur** à partir de
+`security-headers.conf.template`, et non figée au build : l'image est
+construite une fois par commit puis déployée telle quelle sur des
+environnements dont les domaines diffèrent.
+
+```bash
+docker run -e CSP_CONNECT_SRC="https://api.enervision.com https://predict.enervision.com" ...
+```
+
+| Valeur | `connect-src` produit | Effet |
+| --- | --- | --- |
+| non renseignée | `'self'` | Aucun appel cross-origin. **Défaut, qui échoue en se fermant.** |
+| `https://api.example.com` | `'self' https://api.example.com` | Cette seule origine est joignable |
+
+Les origines exactes, séparées par des espaces, schéma compris, **sans chemin
+ni joker**. Un `*` rendrait l'en-tête inutile.
+
+Deux réglages doivent concorder de part et d'autre, sinon le navigateur bloque
+malgré une configuration correcte d'un seul côté :
+
+| Côté | Réglage | Rôle |
+| --- | --- | --- |
+| dashboard | `CSP_CONNECT_SRC` | Autorise le navigateur à **émettre** l'appel |
+| api | `CORS_ALLOWED_ORIGINS` | Autorise le navigateur à **lire** la réponse |
 
 ## Recette manuelle
 
