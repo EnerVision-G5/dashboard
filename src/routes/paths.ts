@@ -15,3 +15,13 @@ export const DASHBOARD_PATH = "/";
  * production — vérifié par un test, la promesse ne valant rien sans preuve.
  */
 export const DESIGN_SYSTEM_PATH = "/design-system";
+
+/**
+ * Page de configuration, atteignable depuis la navigation principale (EV-50).
+ *
+ * La route est déclarée ici et servie dès maintenant : un lien de navigation
+ * qui retomberait sur la règle « * » ramènerait silencieusement au dashboard,
+ * ce qui se lit comme une panne. Son contenu fonctionnel est le périmètre
+ * d'EV-55.
+ */
+export const CONFIG_PATH = "/config";

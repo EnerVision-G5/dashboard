@@ -59,11 +59,11 @@ const SESSION = {
  * Monte l'écran dans un contexte d'authentification déjà ouvert : ces tests
  * portent sur la supervision, la connexion est couverte par AppRoutes.
  */
-function renderPage(session: AuthContextValue["session"] = SESSION) {
+function renderPage() {
   const signOut = vi.fn();
   const value: AuthContextValue = {
-    session,
-    isAuthenticated: session !== null,
+    session: SESSION,
+    isAuthenticated: true,
     isSigningIn: false,
     error: null,
     signIn: vi.fn().mockResolvedValue(true),
@@ -249,15 +249,13 @@ describe("SiteDashboardPage", () => {
   });
 });
 
+/**
+ * Depuis EV-50, l'identité du produit, l'utilisateur connecté et la
+ * déconnexion sont portés par la navigation principale : ces trois
+ * comportements sont vérifiés dans `AppNavbar.test.tsx`, et cette suite ne
+ * couvre plus que ce que la page rend elle-même.
+ */
 describe("SiteDashboardPage · mise en page de la maquette", () => {
-  it("affiche le titre du produit", () => {
-    renderPage();
-
-    expect(
-      screen.getByRole("heading", { name: "Smart Energy Optimiser", level: 1 }),
-    ).toBeDefined();
-  });
-
   it("affiche les trois zones de la maquette une fois un site choisi", async () => {
     renderPage();
 
@@ -317,23 +315,10 @@ describe("SiteDashboardPage · mise en page de la maquette", () => {
     expect(alerts.some((alert) => alert.textContent?.includes("Site introuvable."))).toBe(true);
   });
 
-  it("affiche l'utilisateur connecté et son rôle", () => {
+  it("ne porte plus l'en-tête du produit, désormais dans la navigation", () => {
     renderPage();
 
-    expect(screen.getByText("dev.reader · reader")).toBeDefined();
-  });
-
-  it("ferme la session sur demande", () => {
-    const { signOut } = renderPage();
-
-    fireEvent.click(screen.getByRole("button", { name: "Se déconnecter" }));
-
-    expect(signOut).toHaveBeenCalled();
-  });
-
-  it("n'affiche ni utilisateur ni déconnexion hors session", () => {
-    renderPage(null);
-
+    expect(screen.queryByRole("heading", { name: "Smart Energy Optimiser" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Se déconnecter" })).toBeNull();
   });
 });
