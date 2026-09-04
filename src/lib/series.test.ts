@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildChartSeries, countMissingReadings } from "./series";
+import {
+  UNSPECIFIED_EXCLUSION_REASON,
+  buildChartSeries,
+  countMissingReadings,
+  summarizeExclusions,
+} from "./series";
 import { makePredictionPoint, makeReading } from "../test/doubles";
 
 describe("buildChartSeries", () => {
@@ -90,5 +95,111 @@ describe("countMissingReadings", () => {
 
     // Le point purement prédit n'est pas une mesure manquante.
     expect(countMissingReadings(points)).toBe(1);
+  });
+});
+
+describe("summarizeExclusions", () => {
+  it("ne trouve rien quand aucune mesure n'est écartée", () => {
+    const points = buildChartSeries([makeReading()], []);
+
+    expect(summarizeExclusions(points)).toEqual({
+      total: 0,
+      reasons: [],
+      firstAt: null,
+      lastAt: null,
+    });
+  });
+
+  it("compte les mesures écartées et borne leur plage", () => {
+    const points = buildChartSeries(
+      [
+        makeReading({ timestamp: "2026-09-02T00:00:00Z" }),
+        makeReading({
+          timestamp: "2026-09-02T00:01:00Z",
+          excluded: true,
+          exclusion_reason: "temperature_sensor_failure",
+        }),
+        makeReading({
+          timestamp: "2026-09-02T00:02:00Z",
+          excluded: true,
+          exclusion_reason: "temperature_sensor_failure",
+        }),
+      ],
+      [],
+    );
+
+    const summary = summarizeExclusions(points);
+
+    expect(summary.total).toBe(2);
+    expect(summary.reasons).toEqual([
+      { reason: "temperature_sensor_failure", count: 2 },
+    ]);
+    expect(summary.firstAt).toBe("2026-09-02T00:01:00Z");
+    expect(summary.lastAt).toBe("2026-09-02T00:02:00Z");
+  });
+
+  it("classe les motifs du plus fréquent au moins fréquent", () => {
+    const points = buildChartSeries(
+      [
+        makeReading({
+          timestamp: "2026-09-02T00:00:00Z",
+          excluded: true,
+          exclusion_reason: "rare",
+        }),
+        makeReading({
+          timestamp: "2026-09-02T00:01:00Z",
+          excluded: true,
+          exclusion_reason: "fréquent",
+        }),
+        makeReading({
+          timestamp: "2026-09-02T00:02:00Z",
+          excluded: true,
+          exclusion_reason: "fréquent",
+        }),
+      ],
+      [],
+    );
+
+    expect(summarizeExclusions(points).reasons.map((entry) => entry.reason)).toEqual([
+      "fréquent",
+      "rare",
+    ]);
+  });
+
+  it("nomme le motif manquant plutôt que de laisser un total inexpliqué", () => {
+    const points = buildChartSeries(
+      [makeReading({ excluded: true, exclusion_reason: null })],
+      [],
+    );
+
+    expect(summarizeExclusions(points).reasons).toEqual([
+      { reason: UNSPECIFIED_EXCLUSION_REASON, count: 1 },
+    ]);
+  });
+
+  it("transporte l'exclusion jusqu'au point de la série, sans masquer la mesure", () => {
+    const points = buildChartSeries(
+      [
+        makeReading({
+          consumption_kw: 118,
+          excluded: true,
+          exclusion_reason: "spike_simule",
+        }),
+      ],
+      [],
+    );
+
+    // La mesure reste tracée : c'est l'exclusion qui est signalée, pas la
+    // valeur qui disparaît.
+    expect(points[0].actualKw).toBe(118);
+    expect(points[0].excluded).toBe(true);
+    expect(points[0].exclusionReason).toBe("spike_simule");
+  });
+
+  it("ne compte pas comme écarté un point purement prédit", () => {
+    const points = buildChartSeries([], [makePredictionPoint()]);
+
+    expect(points[0].excluded).toBe(false);
+    expect(summarizeExclusions(points).total).toBe(0);
   });
 });

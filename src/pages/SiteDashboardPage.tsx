@@ -10,6 +10,9 @@
  *   - Recommandations, sans donnée tant que le contrat n'en publie pas ;
  *   - Indicateurs, qui porte le graphique consommation / prédiction d'EV-16.
  *
+ * Une seconde rangée porte les diagnostics d'EV-52 : ingestion, écart
+ * prédiction/réel, et mesures écartées avec les pannes de capteur.
+ *
  * La grille passe de une à deux puis à trois zones selon la largeur : la
  * maquette est dessinée pour un écran large, mais un panneau temps réel doit
  * rester lisible sur un téléphone en intervention.
@@ -18,12 +21,16 @@
 import { ConsumptionPredictionChart } from "../components/ConsumptionPredictionChart";
 import { DataQualityBanner } from "../components/DataQualityBanner";
 import { DemoDataBadge } from "../components/DemoDataBadge";
+import { ExcludedMeasuresPanel } from "../components/ExcludedMeasuresPanel";
+import { ForecastAccuracyPanel } from "../components/ForecastAccuracyPanel";
+import { IngestionPanel } from "../components/IngestionPanel";
 import { RealtimeConsumptionPanel } from "../components/RealtimeConsumptionPanel";
 import { RecommendationsPanel } from "../components/RecommendationsPanel";
 import { SiteSelector } from "../components/SiteSelector";
-import { countMissingReadings } from "../lib/series";
+import { countMissingReadings, summarizeExclusions } from "../lib/series";
 import { useDataHealth } from "../hooks/useDataHealth";
 import { useLatestReading } from "../hooks/useLatestReading";
+import { useSiteDiagnostics } from "../hooks/useSiteDiagnostics";
 import { useSiteSeries } from "../hooks/useSiteSeries";
 import { useSites } from "../hooks/useSites";
 import { Card } from "../ui/Card";
@@ -58,9 +65,20 @@ export function SiteDashboardPage() {
     (siteId) => sites.find((site) => site.site_id === siteId)?.site_name ?? siteId,
   );
 
+  const {
+    indicators: siteIndicators,
+    failures,
+    isLoading: diagnosticsLoading,
+    indicatorsError: siteIndicatorsError,
+    failuresError,
+  } = useSiteDiagnostics(selectedSite?.site_id ?? null);
+
   const hasActual = points.some((point) => point.actualKw !== null);
   const hasPredicted = points.some((point) => point.predictedKw !== null);
   const missingReadings = countMissingReadings(points);
+  // Les mesures écartées sont tirées de la série déjà chargée pour le
+  // graphique : aucune requête de plus pour la même information.
+  const exclusions = summarizeExclusions(points);
 
   return (
     <>
@@ -136,6 +154,12 @@ export function SiteDashboardPage() {
                   reading={latestReading}
                   isLoading={latestLoading}
                   error={latestError}
+                  // Le seuil de retard vient de l'API, pas du front : les deux
+                  // panneaux de fraîcheur de l'écran disent alors la même
+                  // chose (EV-52).
+                  staleThresholdSeconds={
+                    siteIndicators?.ingestion.stale_threshold_seconds
+                  }
                 />
               </div>
 
@@ -192,6 +216,30 @@ export function SiteDashboardPage() {
                   </div>
                 </Card>
               </div>
+            </div>
+
+            {/* Diagnostics d'EV-52, sous la maquette : ils expliquent la
+                consommation affichée au-dessus — d'où viennent les mesures,
+                ce qui a été écarté, et ce que valent les prévisions — mais ne
+                sont pas ce qu'on vient lire en premier. */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <IngestionPanel
+                ingestion={siteIndicators?.ingestion ?? null}
+                isLoading={diagnosticsLoading}
+                error={siteIndicatorsError}
+              />
+              <ForecastAccuracyPanel
+                accuracy={siteIndicators?.accuracy ?? null}
+                isLoading={diagnosticsLoading}
+                error={siteIndicatorsError}
+              />
+              <ExcludedMeasuresPanel
+                exclusions={exclusions}
+                failures={failures}
+                isLoading={seriesLoading}
+                failuresError={failuresError}
+                windowHours={windowHours}
+              />
             </div>
           </>
         )}
