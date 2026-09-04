@@ -8,6 +8,7 @@ import {
   makePrediction,
   makePredictionPoint,
   makeReading,
+  makeSensorFailure,
   makeSensorHealth,
   makeSite,
   makeSiteIndicators,
@@ -24,6 +25,8 @@ const fetchLatestReading = vi.hoisted(() => vi.fn());
 const fetchPredictions = vi.hoisted(() => vi.fn());
 const fetchIndicators = vi.hoisted(() => vi.fn());
 const fetchSensors = vi.hoisted(() => vi.fn());
+const fetchSiteIndicators = vi.hoisted(() => vi.fn());
+const fetchSensorHistory = vi.hoisted(() => vi.fn());
 
 vi.mock("../api/sites", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/sites")>()),
@@ -45,10 +48,12 @@ vi.mock("../api/predictions", async (importOriginal) => ({
 vi.mock("../api/indicators", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/indicators")>()),
   fetchIndicators,
+  fetchSiteIndicators,
 }));
 vi.mock("../api/sensors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/sensors")>()),
   fetchSensors,
+  fetchSensorHistory,
 }));
 
 const SITE_A = makeSite({ site_id: "SITE-001", site_name: "Usine Nantes Nord", status: "active" });
@@ -116,6 +121,8 @@ beforeEach(() => {
     makeSiteIndicators({ site_id: "SITE-002" }),
   ]);
   fetchSensors.mockResolvedValue([makeSensorHealth()]);
+  fetchSiteIndicators.mockResolvedValue(makeSiteIndicators({ site_id: "SITE-001" }));
+  fetchSensorHistory.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -165,7 +172,11 @@ describe("SiteDashboardPage", () => {
     // plus aucune trace du graphique précédent.
     await screen.findByRole("heading", { name: "Entrepôt Rezé", level: 2 });
     await waitFor(() => {
-      expect(screen.getByRole("status").textContent).toContain("Entrepôt Rezé");
+      // Depuis EV-52, plusieurs zones de l'écran annoncent leur propre
+      // chargement — chacune la sienne, ce qui est le comportement voulu. On
+      // cherche donc celle qui parle du site, pas l'unique.
+      const chargements = screen.getAllByRole("status").map((zone) => zone.textContent);
+      expect(chargements.some((texte) => texte?.includes("Entrepôt Rezé"))).toBe(true);
     });
     expect(screen.queryByText("Consommation réelle (kW)")).toBeNull();
 
@@ -402,5 +413,98 @@ describe("SiteDashboardPage · bandeau de fraîcheur et de qualité (EV-18)", ()
         expect.anything(),
       );
     });
+  });
+});
+
+describe("SiteDashboardPage · diagnostics du site (EV-52)", () => {
+  it("affiche les trois panneaux de diagnostic sous la maquette", async () => {
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { name: "Ingestion des mesures", level: 2 }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("heading", { name: "Écart prédiction / réel", level: 2 }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("heading", {
+        name: "Mesures écartées et pannes de capteur",
+        level: 2,
+      }),
+    ).toBeDefined();
+  });
+
+  it("passe au panneau temps réel le seuil de retard de l'API", async () => {
+    // Mesure vieille de trois minutes, seuil de l'API à cinq : le panneau ne
+    // doit pas annoncer de retard, alors que son seuil interne de deux minutes
+    // l'aurait fait.
+    fetchLatestReading.mockResolvedValue(
+      makeReading({ site_id: "SITE-001", timestamp: new Date(Date.now() - 180_000).toISOString() }),
+    );
+
+    renderPage();
+
+    await screen.findByRole("heading", { name: "Ingestion des mesures", level: 2 });
+    expect(screen.queryByText(/l'ingestion est en retard/)).toBeNull();
+  });
+
+  it("résume les mesures écartées de la fenêtre affichée", async () => {
+    fetchReadings.mockResolvedValue([
+      makeReading({ site_id: "SITE-001", timestamp: "2026-09-02T00:00:00Z" }),
+      makeReading({
+        site_id: "SITE-001",
+        timestamp: "2026-09-02T00:01:00Z",
+        excluded: true,
+        exclusion_reason: "temperature_sensor_failure",
+      }),
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText("1")).toBeDefined();
+    expect(screen.getByText("1 × temperature_sensor_failure")).toBeDefined();
+  });
+
+  it("affiche l'historique des pannes du site affiché", async () => {
+    fetchSensorHistory.mockResolvedValue([
+      makeSensorFailure({ capteur: "network", ended_at: null, ongoing: true }),
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText("Capteur réseau")).toBeDefined();
+    expect(screen.getByText(/panne en cours/)).toBeDefined();
+  });
+
+  it("suit le site choisi pour ses diagnostics", async () => {
+    renderPage();
+    await screen.findByRole("heading", { name: "Ingestion des mesures", level: 2 });
+
+    fireEvent.change(screen.getByLabelText("Site"), { target: { value: "SITE-002" } });
+
+    await waitFor(() => {
+      expect(fetchSiteIndicators).toHaveBeenLastCalledWith(
+        expect.objectContaining({ siteId: "SITE-002" }),
+      );
+    });
+    expect(fetchSensorHistory).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "SITE-002",
+      expect.anything(),
+    );
+  });
+
+  it("garde les mesures affichées quand les diagnostics échouent", async () => {
+    fetchSiteIndicators.mockRejectedValue(
+      new ApiError("L'API métier est injoignable.", null),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
+    const alerts = await screen.findAllByRole("alert");
+    expect(
+      alerts.some((alert) => alert.textContent?.includes("État de l'ingestion indisponible")),
+    ).toBe(true);
   });
 });
