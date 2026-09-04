@@ -9,6 +9,7 @@
 
 import type { AxiosInstance } from "axios";
 import type { SiteIndicators } from "../api/indicators";
+import type { Recommendation, Recommendations } from "../api/recommendations";
 import type { SensorFailure, SensorHealth } from "../api/sensors";
 import type { EnergyReading } from "../api/readings";
 import type {
@@ -190,6 +191,42 @@ export function makeSensorHealth(
     overall: "ok",
     releve_le: "2026-09-02T11:59:00Z",
     failing_until: null,
+    ...overrides,
+  };
+}
+
+/** Action proposée par l'API, conforme à `RecommendationOut`. */
+export function makeRecommendation(
+  overrides: Partial<Recommendation> = {},
+): Recommendation {
+  return {
+    type: "predicted_peak",
+    severity: "high",
+    message: "Pointe prévue à 18 h : décaler la charge du four si possible.",
+    value_kw: 480,
+    at: "2026-09-02T18:00:00Z",
+    window_start: null,
+    window_end: null,
+    ...overrides,
+  };
+}
+
+/**
+ * Jeu de recommandations, tel que le contrat le renvoie.
+ *
+ * `detail` reste nul par défaut : le contrat ne le sert que pour expliquer une
+ * liste vide, et le double part d'une liste garnie.
+ */
+export function makeRecommendations(
+  overrides: Partial<Recommendations> = {},
+): Recommendations {
+  return {
+    site_id: "SITE-001",
+    generated_at: "2026-09-02T12:00:00Z",
+    horizon_hours: 24,
+    model_version: "enervision_xgboost:3",
+    detail: null,
+    items: [makeRecommendation()],
     ...overrides,
   };
 }

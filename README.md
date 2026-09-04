@@ -278,7 +278,7 @@ souscrite et la localisation du site choisi, puis trois zones.
 | --- | --- | --- |
 | Fraîcheur et qualité | `GET /indicators` et `GET /sites/{id}/sensors`, rafraîchis toutes les 60 s | Servie |
 | Consommation temps réel | `GET /sites/{id}/readings/latest`, rafraîchi toutes les 30 s | Servie |
-| Recommandations | `GET /sites/{id}/recommendations`, servie mais pas encore branchée | Vide, voir ci-dessous |
+| Recommandations | `GET /sites/{id}/recommendations`, rafraîchi toutes les 5 min | Servie |
 | Indicateurs | graphique consommation / prédiction d'EV-16 | Servi |
 | Diagnostics du site | `GET /sites/{id}/indicators` et `GET /sites/{id}/sensors/history`, rafraîchis toutes les 60 s | Servis |
 
@@ -358,12 +358,49 @@ Une mesure **écartée des agrégats** (`excluded`) y est signalée avec son mot
 sans être cachée : elle reste affichée telle qu'elle a été relevée, mais on sait
 qu'elle ne compte pas dans les moyennes de l'API.
 
-**Recommandations** tient sa place dans la mise en page sans rien afficher, et
-c'est désormais un retard et non une impossibilité : le contrat **1.5.0**
-publie `GET /sites/{id}/recommendations`, servi par l'API. Le brancher relève
-d'**EV-54**. La zone reste donc vide en attendant, plutôt que remplie de
-conseils inventés : sur une facture d'électricité, ils seraient lus comme de
-vrais conseils.
+**Recommandations** est branché sur l'API depuis **EV-54** :
+`GET /sites/{id}/recommendations` propose des actions calculées à partir des
+prévisions du modèle. Le dashboard n'en formule aucune et n'en reclasse
+aucune — voir [Recommandations](#recommandations).
+
+### Recommandations
+
+**EV-54** branche la zone Recommandations sur
+`GET /sites/{id}/recommendations`, que l'API calcule **à la demande** depuis les
+prévisions archivées du site — le contrat le précise : « rien n'est archivé ».
+La zone tenait sa place sans rien afficher depuis EV-48 ; les conseils qu'elle
+présente maintenant viennent tous du service.
+
+![Le panneau de recommandations : liste servie, liste vide expliquée, flux tombé](docs/images/app-recommandations.png)
+
+Quatre règles tiennent ce panneau :
+
+- **le dashboard ne conseille rien.** `message` est décrit au contrat comme une
+  « formulation prête à afficher » : elle n'est ni reformulée, ni tronquée, ni
+  complétée. Les trois natures d'action du contrat — `predicted_peak`,
+  `capacity_overrun`, `sensor_failure` — sont seulement traduites en français ;
+- **l'ordre est celui de l'API.** `items` arrive « de la plus urgente à la moins
+  urgente ». Retrier la liste ici reviendrait à substituer notre jugement à
+  celui du service qui a vu les chiffres ;
+- **la sévérité n'est jamais portée par la seule couleur.** Chaque action
+  affiche son niveau écrit — faible, moyenne, élevée, critique — comme les
+  bandeaux du design system ;
+- **une liste vide est expliquée par l'API.** Le contrat sert un champ `detail`
+  dont la description est sans ambiguïté : « raison d'une liste vide ». Le
+  panneau l'affiche, parce que « aucun risque détecté » et « aucune prévision à
+  examiner » ne se valent pas, et que seul le service sait lequel des deux
+  s'applique. Une erreur d'appel, elle, n'est jamais présentée comme une
+  absence de conseil.
+
+La provenance est affichée sous la liste : horizon examiné, heure du calcul et
+**version du modèle**. Le contrat le justifie mieux que ce README ne le
+ferait — « un conseil ne vaut que ce que vaut le modèle qui le fonde » — et son
+absence est signalée plutôt que passée sous silence.
+
+Le rafraîchissement est de **cinq minutes**, et non de trente secondes comme
+les mesures : les recommandations découlent des prévisions, qu'un job recalcule
+toutes les heures. Interroger plus souvent relirait le même raisonnement sur
+les mêmes prévisions.
 
 ### Diagnostics du site
 
