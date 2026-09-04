@@ -11,7 +11,10 @@
  *   - Indicateurs, qui porte le graphique consommation / prédiction d'EV-16.
  *
  * Une seconde rangée porte les diagnostics d'EV-52 : ingestion, écart
- * prédiction/réel, et mesures écartées avec les pannes de capteur.
+ * prédiction/réel, et mesures écartées avec les pannes de capteur. Une
+ * troisième porte les deux seules commandes du dashboard — déclencher un pic,
+ * resynchroniser le référentiel — avec l'historique des pics et le registre
+ * des modèles.
  *
  * La grille passe de une à deux puis à trois zones selon la largeur : la
  * maquette est dessinée pour un écran large, mais un panneau temps réel doit
@@ -24,22 +27,33 @@ import { DemoDataBadge } from "../components/DemoDataBadge";
 import { ExcludedMeasuresPanel } from "../components/ExcludedMeasuresPanel";
 import { ForecastAccuracyPanel } from "../components/ForecastAccuracyPanel";
 import { IngestionPanel } from "../components/IngestionPanel";
+import { ModelRegistryPanel } from "../components/ModelRegistryPanel";
 import { RealtimeConsumptionPanel } from "../components/RealtimeConsumptionPanel";
 import { RecommendationsPanel } from "../components/RecommendationsPanel";
+import { SiteActionsPanel } from "../components/SiteActionsPanel";
 import { SiteSelector } from "../components/SiteSelector";
+import { SpikeHistoryPanel } from "../components/SpikeHistoryPanel";
 import { countMissingReadings, summarizeExclusions } from "../lib/series";
 import { useDataHealth } from "../hooks/useDataHealth";
 import { useLatestReading } from "../hooks/useLatestReading";
 import { useRecommendations } from "../hooks/useRecommendations";
+import { useModelRegistry } from "../hooks/useModelRegistry";
 import { useSiteDiagnostics } from "../hooks/useSiteDiagnostics";
+import { useSpikeHistory } from "../hooks/useSpikeHistory";
 import { useSiteSeries } from "../hooks/useSiteSeries";
 import { useSites } from "../hooks/useSites";
 import { Card } from "../ui/Card";
 import { EmptyState, ErrorState, LoadingState } from "../ui/states";
 
 export function SiteDashboardPage() {
-  const { sites, selectedSite, selectSite, isLoading: sitesLoading, error: sitesError } =
-    useSites();
+  const {
+    sites,
+    selectedSite,
+    selectSite,
+    reload: reloadSites,
+    isLoading: sitesLoading,
+    error: sitesError,
+  } = useSites();
   const {
     points,
     prediction,
@@ -78,6 +92,20 @@ export function SiteDashboardPage() {
     indicatorsError: siteIndicatorsError,
     failuresError,
   } = useSiteDiagnostics(selectedSite?.site_id ?? null);
+
+  const {
+    spikes,
+    isLoading: spikesLoading,
+    error: spikesError,
+    reload: reloadSpikes,
+  } = useSpikeHistory(selectedSite?.site_id ?? null);
+  const {
+    current: currentModel,
+    models,
+    isLoading: modelsLoading,
+    error: modelsError,
+    currentError: currentModelError,
+  } = useModelRegistry();
 
   const hasActual = points.some((point) => point.actualKw !== null);
   const hasPredicted = points.some((point) => point.predictedKw !== null);
@@ -249,6 +277,32 @@ export function SiteDashboardPage() {
                 isLoading={seriesLoading}
                 failuresError={failuresError}
                 windowHours={windowHours}
+              />
+            </div>
+
+            {/* Les commandes et ce qu'elles produisent, en bas d'écran : on
+                agit sur la source après avoir lu son état, pas avant. */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <SiteActionsPanel
+                siteId={selectedSite.site_id}
+                siteName={selectedSite.site_name}
+                // Un pic déclenché doit apparaître dans son historique sans
+                // recharger la page ; une synchronisation doit rafraîchir le
+                // sélecteur de site.
+                onSpikeTriggered={reloadSpikes}
+                onSitesSynced={reloadSites}
+              />
+              <SpikeHistoryPanel
+                spikes={spikes}
+                isLoading={spikesLoading}
+                error={spikesError}
+              />
+              <ModelRegistryPanel
+                current={currentModel}
+                models={models}
+                isLoading={modelsLoading}
+                error={modelsError}
+                currentError={currentModelError}
               />
             </div>
           </>

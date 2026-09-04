@@ -26,6 +26,8 @@
 
 import type { Recommendation, RecommendationSeverity, RecommendationType } from "../api/recommendations";
 import type { Recommendations } from "../api/recommendations";
+import { isDegraded } from "../api/recommendations";
+import { Alert } from "../ui/Alert";
 import { Card } from "../ui/Card";
 import { EmptyState, ErrorState, LoadingState } from "../ui/states";
 
@@ -177,6 +179,21 @@ export function RecommendationsPanel({
 
       {!isLoading && error === null && recommendations !== null && (
         <>
+          {/* Mode dégradé : des conseils sans prévision derrière. Le dire
+              importe autant que les afficher — la seule règle qui survit à
+              l'absence de modèle est celle des capteurs, et l'utilisateur ne
+              doit pas croire que le silence des deux autres vaut « rien à
+              signaler ». */}
+          {isDegraded(recommendations) && (
+            <div className="mb-3">
+              <Alert tone="avertissement" label="Mode dégradé">
+                Aucune prévision n'a pu être examinée : seules les règles
+                indépendantes du modèle sont appliquées. Les pointes et
+                dépassements de puissance ne sont pas évalués.
+              </Alert>
+            </div>
+          )}
+
           {recommendations.items.length === 0 ? (
             <EmptyState
               detail={
