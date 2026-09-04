@@ -8,6 +8,7 @@
  */
 
 import type { AxiosInstance } from "axios";
+import type { Alert } from "../api/alerts";
 import type { SiteIndicators } from "../api/indicators";
 import type { Model } from "../api/models";
 import type { Recommendation, Recommendations } from "../api/recommendations";
@@ -233,6 +234,21 @@ export function makeRecommendations(
     model_version: "enervision_xgboost:3",
     detail: null,
     items: [makeRecommendation()],
+    ...overrides,
+  };
+}
+
+/** Alerte telle que le contrat la publie. */
+export function makeAlert(overrides: Partial<Alert> = {}): Alert {
+  return {
+    alert_id: "AL-001",
+    site_id: "SITE-001",
+    timestamp: "2026-09-02T12:00:00Z",
+    severity: "high",
+    type: "spike",
+    message: "Pic de consommation détecté sur le site.",
+    value: 812,
+    threshold: 500,
     ...overrides,
   };
 }
