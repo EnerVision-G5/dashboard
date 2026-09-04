@@ -165,3 +165,43 @@ describe("RecommendationsPanel", () => {
     expect(screen.getByText(/aucune version de modèle servie/)).toBeDefined();
   });
 });
+
+describe("RecommendationsPanel · mode dégradé", () => {
+  it("prévient quand les conseils ne s'appuient sur aucune prévision", () => {
+    renderPanel({
+      recommendations: makeRecommendations({
+        model_version: null,
+        items: [
+          makeRecommendation({
+            type: "sensor_failure",
+            severity: "high",
+            message: "Intervention capteur : fiabilité dégradée.",
+            value_kw: null,
+            at: null,
+          }),
+        ],
+      }),
+    });
+
+    const bandeau = screen.getByRole("status");
+    expect(bandeau.textContent).toContain("Mode dégradé");
+    expect(bandeau.textContent).toContain("Aucune prévision n'a pu être examinée");
+    // L'action reste affichée : c'est le seul conseil que l'API peut donner
+    // sans modèle, et il est utile.
+    expect(screen.getByText("Intervention capteur : fiabilité dégradée.")).toBeDefined();
+  });
+
+  it("n'affiche aucun bandeau quand un modèle fonde les conseils", () => {
+    renderPanel();
+
+    expect(screen.queryByText("Mode dégradé")).toBeNull();
+  });
+
+  it("n'affiche aucun bandeau sur une liste vide", () => {
+    renderPanel({
+      recommendations: makeRecommendations({ items: [], model_version: null }),
+    });
+
+    expect(screen.queryByText("Mode dégradé")).toBeNull();
+  });
+});

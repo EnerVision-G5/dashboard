@@ -281,6 +281,9 @@ souscrite et la localisation du site choisi, puis trois zones.
 | Recommandations | `GET /sites/{id}/recommendations`, rafraîchi toutes les 5 min | Servie |
 | Indicateurs | graphique consommation / prédiction d'EV-16 | Servi |
 | Diagnostics du site | `GET /sites/{id}/indicators` et `GET /sites/{id}/sensors/history`, rafraîchis toutes les 60 s | Servis |
+| Actions d'exploitation | `POST /simulations/spike/{id}` et `POST /sites/sync`, sur demande | Servies, **rôle `writer`** |
+| Historique des pics | `GET /simulations/spike`, relu après chaque déclenchement | Servi |
+| Modèles | `GET /models` et `GET /models/current` | Servis |
 
 ### Bandeau de fraîcheur et de qualité des données
 
@@ -401,6 +404,79 @@ Le rafraîchissement est de **cinq minutes**, et non de trente secondes comme
 les mesures : les recommandations découlent des prévisions, qu'un job recalcule
 toutes les heures. Interroger plus souvent relirait le même raisonnement sur
 les mêmes prévisions.
+
+### Mode dégradé des recommandations
+
+Quand le service d'inférence est indisponible — il répond **503** tant qu'aucun
+modèle n'est publié au registre MLflow, ce qui est le cas courant aujourd'hui —
+l'API **ne propage pas l'erreur**. Elle répond 200 et sert la seule règle qui ne
+dépend pas de la prévision, la panne de capteur, avec `model_version` à `null`.
+
+Le panneau affiche alors un bandeau « Mode dégradé » : les conseils présentés
+restent utiles, mais les pointes et dépassements de puissance n'ont pas été
+évalués, et l'utilisateur ne doit pas lire le silence des deux autres règles
+comme un « rien à signaler ».
+
+> **Écart avec le plan de ce ticket.** Le contrat 1.5.0 **ne publie aucun champ
+> `degraded`**, et l'API n'en calcule aucun. L'état est donc *déduit* du seul
+> signal structurel disponible — des actions servies alors qu'aucune version de
+> modèle ne les fonde — dans `isDegraded` (`src/api/recommendations.ts`).
+> S'appuyer sur le texte de `detail` aurait cassé à la première reformulation
+> côté API. Rendre ce mode explicite demande une PR de contrat ; aucun champ
+> n'a été inventé ici.
+
+### Commandes d'exploitation
+
+Le dashboard **lit**, sauf deux commandes, réunies dans le panneau « Actions
+d'exploitation » en bas d'écran :
+
+| Commande | Route | Effet |
+| --- | --- | --- |
+| Déclencher un pic de 30 min | `POST /simulations/spike/{id}` | la source produit une **vraie** surconsommation |
+| Recharger les sites | `POST /sites/sync` | l'API relit le référentiel depuis la source |
+
+Le contrat réserve les deux au rôle **`writer`** (403 sinon). Le rôle étant lu
+dans le jeton, les boutons ne sont pas affichés à un `reader` : proposer une
+commande qu'on sait refusée serait une fausse promesse. Cette garde reste un
+confort d'affichage — l'API demeure la seule autorité.
+
+Trois précisions que l'écran donne, parce qu'elles évitent de chercher en vain :
+
+- un pic **n'apparaît pas immédiatement** dans la courbe : la source le produit,
+  la collecte l'ingère, et le graphique ne le montre qu'au relevé suivant ;
+- une synchronisation qui rapporte moins de sites qu'annoncés le dit — l'API
+  écarte un site auquel manque un champ obligatoire du contrat ;
+- un **502** n'est pas un **403** : le premier dit que la source n'a pas
+  répondu, le second que le compte n'a pas le droit.
+
+Le site sélectionné **survit** à une synchronisation : il n'est remplacé que
+s'il a disparu du référentiel.
+
+> **Recette.** Les comptes `dev.writer` et `dev.reader` du seed d'infra ne
+> peuvent pas se connecter (hachage bcrypt refusé par l'API, qui ne vérifie que
+> de l'argon2id — voir [`docs/EV-48-recette.md`](docs/EV-48-recette.md)). Ces
+> deux commandes ne sont donc pas démontrables tant qu'un compte `writer`
+> utilisable n'existe pas.
+
+### Historique des pics et registre des modèles
+
+**Historique des pics** liste ce qui a été déclenché, par qui, et ce que la
+source en a fait — statut renvoyé, consommation constatée, qualité de la
+mesure. Il ne se rafraîchit pas tout seul : un pic n'apparaît que si quelqu'un
+le déclenche, donc l'écran se met à jour à cause d'une action, pas d'un
+minuteur. Une consommation absente est affichée comme telle, jamais comme
+zéro kW.
+
+**Modèles** affiche la version promue et les versions précédentes. Deux dates
+sont servies et ne se confondent pas : `date_entrainement`, quand le modèle a
+été entraîné, et `created_at`, quand la ligne est entrée au registre — un
+modèle entraîné en juin et promu en septembre n'a pas la même histoire qu'un
+modèle entraîné la veille. C'est ce panneau qu'on vient consulter lorsqu'une
+dérive apparaît, pour savoir si elle suit une promotion.
+
+**Aucun modèle promu est une situation normale**, pas une panne : le 404 de
+`GET /models/current` est traduit en information. Le registre MLflow peut être
+vide, et c'est précisément ce qui explique le 503 du service d'inférence.
 
 ### Diagnostics du site
 

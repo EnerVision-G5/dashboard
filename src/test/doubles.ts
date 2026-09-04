@@ -9,7 +9,9 @@
 
 import type { AxiosInstance } from "axios";
 import type { SiteIndicators } from "../api/indicators";
+import type { Model } from "../api/models";
 import type { Recommendation, Recommendations } from "../api/recommendations";
+import type { SpikeSimulation } from "../api/simulations";
 import type { SensorFailure, SensorHealth } from "../api/sensors";
 import type { EnergyReading } from "../api/readings";
 import type {
@@ -53,7 +55,11 @@ export function createFakeClient(respond: Responder): FakeClient {
   const instance = {
     get: (url: string, config?: { params?: Record<string, unknown> }) =>
       handle({ method: "get", url, params: config?.params }),
-    post: (url: string, body?: unknown) => handle({ method: "post", url, body }),
+    // Le troisième argument d'Axios porte la configuration : les routes de
+    // commande du contrat (pic simulé) passent leurs paramètres par la
+    // requête et non par un corps, il faut donc les enregistrer aussi.
+    post: (url: string, body?: unknown, config?: { params?: Record<string, unknown> }) =>
+      handle({ method: "post", url, body, params: config?.params }),
   } as unknown as AxiosInstance;
 
   return { instance, calls };
@@ -227,6 +233,39 @@ export function makeRecommendations(
     model_version: "enervision_xgboost:3",
     detail: null,
     items: [makeRecommendation()],
+    ...overrides,
+  };
+}
+
+/** Modèle du registre, tel que le contrat le publie. */
+export function makeModel(overrides: Partial<Model> = {}): Model {
+  return {
+    modele_id: 3,
+    nom: "enervision_xgboost",
+    version: "3",
+    actif: true,
+    date_entrainement: "2026-08-30T02:00:00Z",
+    created_at: "2026-08-30T02:05:00Z",
+    mlflow_run_id: "9f2c1ab4d5e6789012345678abcdef01",
+    ...overrides,
+  };
+}
+
+/** Pic simulé, tel que l'API l'archive. */
+export function makeSpikeSimulation(
+  overrides: Partial<SpikeSimulation> = {},
+): SpikeSimulation {
+  return {
+    simulation_id: 1,
+    site_id: "SITE-001",
+    duration_minutes: 30,
+    statut: "accepted",
+    evenement: "spike",
+    message: null,
+    declenche_par: "dev.writer",
+    declenche_le: "2026-09-04T12:00:00Z",
+    consumption_kw_constatee: 812,
+    data_quality_constatee: "good",
     ...overrides,
   };
 }

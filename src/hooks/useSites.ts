@@ -16,6 +16,8 @@ export interface SitesState {
   sites: Site[];
   selectedSite: Site | null;
   selectSite: (siteId: string) => void;
+  /** Relit le référentiel, après une synchronisation par exemple. */
+  reload: () => void;
   isLoading: boolean;
   error: string | null;
 }
@@ -25,6 +27,10 @@ export function useSites(): SitesState {
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Compteur d'actualisation : l'incrémenter relance l'effet, ce qui est la
+  // seule façon de relire le référentiel sans dupliquer la logique de
+  // chargement hors de l'effet.
+  const [refreshCount, setRefreshCount] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -39,9 +45,15 @@ export function useSites(): SitesState {
           return;
         }
         setSites(loaded);
-        // Valeur initiale uniquement : les rendus suivants ne repassent pas
-        // ici, le choix de l'utilisateur ne peut donc pas être écrasé.
-        setSelectedSiteId(pickInitialSite(loaded)?.site_id ?? null);
+        // Le choix de l'utilisateur survit à un rechargement : il n'est
+        // remplacé que si le site sélectionné a disparu du référentiel. Sans
+        // cette garde, une synchronisation ramènerait l'écran sur le premier
+        // site actif au milieu d'une consultation.
+        setSelectedSiteId((current) =>
+          current !== null && loaded.some((site) => site.site_id === current)
+            ? current
+            : (pickInitialSite(loaded)?.site_id ?? null),
+        );
       } catch (caught) {
         if (!active || isCancellation(caught)) {
           return;
@@ -62,16 +74,21 @@ export function useSites(): SitesState {
       active = false;
       controller.abort();
     };
-  }, []);
+  }, [refreshCount]);
 
   const selectSite = useCallback((siteId: string) => {
     setSelectedSiteId(siteId);
+  }, []);
+
+  const reload = useCallback(() => {
+    setRefreshCount((count) => count + 1);
   }, []);
 
   return {
     sites,
     selectedSite: sites.find((site) => site.site_id === selectedSiteId) ?? null,
     selectSite,
+    reload,
     isLoading,
     error,
   };

@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SiteDashboardPage } from "./SiteDashboardPage";
 import { ApiError } from "../api/http";
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthContextValue } from "../auth/AuthContext";
 import {
+  makeModel,
   makePrediction,
   makePredictionPoint,
   makeReading,
   makeRecommendations,
+  makeSpikeSimulation,
   makeSensorFailure,
   makeSensorHealth,
   makeSite,
@@ -29,10 +31,16 @@ const fetchSensors = vi.hoisted(() => vi.fn());
 const fetchSiteIndicators = vi.hoisted(() => vi.fn());
 const fetchSensorHistory = vi.hoisted(() => vi.fn());
 const fetchRecommendations = vi.hoisted(() => vi.fn());
+const fetchSpikes = vi.hoisted(() => vi.fn());
+const triggerSpike = vi.hoisted(() => vi.fn());
+const fetchModels = vi.hoisted(() => vi.fn());
+const fetchCurrentModel = vi.hoisted(() => vi.fn());
+const syncSites = vi.hoisted(() => vi.fn());
 
 vi.mock("../api/sites", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/sites")>()),
   fetchSites,
+  syncSites,
 }));
 vi.mock("../api/readings", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/readings")>()),
@@ -61,6 +69,16 @@ vi.mock("../api/recommendations", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/recommendations")>()),
   fetchRecommendations,
 }));
+vi.mock("../api/simulations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/simulations")>()),
+  fetchSpikes,
+  triggerSpike,
+}));
+vi.mock("../api/models", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/models")>()),
+  fetchModels,
+  fetchCurrentModel,
+}));
 
 const SITE_A = makeSite({ site_id: "SITE-001", site_name: "Usine Nantes Nord", status: "active" });
 const SITE_B = makeSite({
@@ -86,10 +104,12 @@ const SESSION = {
  * Monte l'écran dans un contexte d'authentification déjà ouvert : ces tests
  * portent sur la supervision, la connexion est couverte par AppRoutes.
  */
-function renderPage() {
+function renderPage({ role = "reader" as "reader" | "writer" } = {}) {
   const signOut = vi.fn();
   const value: AuthContextValue = {
-    session: SESSION,
+    // Le rôle décide de l'affichage des commandes : les deux routes qu'elles
+    // appellent sont réservées au writer par le contrat.
+    session: { ...SESSION, claims: { ...SESSION.claims, role } },
     isAuthenticated: true,
     isSigningIn: false,
     error: null,
@@ -130,6 +150,11 @@ beforeEach(() => {
   fetchSiteIndicators.mockResolvedValue(makeSiteIndicators({ site_id: "SITE-001" }));
   fetchSensorHistory.mockResolvedValue([]);
   fetchRecommendations.mockResolvedValue(makeRecommendations({ site_id: "SITE-001" }));
+  fetchSpikes.mockResolvedValue([]);
+  fetchModels.mockResolvedValue([makeModel()]);
+  fetchCurrentModel.mockResolvedValue(makeModel());
+  triggerSpike.mockResolvedValue(makeSpikeSimulation());
+  syncSites.mockResolvedValue({ received: 7, synchronized: 7, sites: [] });
 });
 
 afterEach(() => {
@@ -570,5 +595,80 @@ describe("SiteDashboardPage · recommandations (EV-54)", () => {
     expect(
       await screen.findByText("Aucune prévision archivée sur l'horizon demandé."),
     ).toBeDefined();
+  });
+});
+
+describe("SiteDashboardPage · commandes et historiques", () => {
+  it("affiche l'historique des pics et le registre des modèles", async () => {
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { name: "Historique des pics de charge", level: 2 }),
+    ).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Modèles", level: 2 })).toBeDefined();
+    expect(await screen.findByText("enervision_xgboost · 3")).toBeDefined();
+  });
+
+  it("ne propose aucune commande à un rôle lecteur", async () => {
+    renderPage();
+
+    await screen.findByRole("heading", { name: "Actions d'exploitation", level: 2 });
+    expect(screen.queryByRole("button", { name: /Déclencher un pic/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Recharger les sites" })).toBeNull();
+    expect(
+      screen.getByText("Le rôle reader ne permet pas d'agir sur la source."),
+    ).toBeDefined();
+  });
+
+  it("relit l'historique des pics après un déclenchement", async () => {
+    renderPage({ role: "writer" });
+    await screen.findByRole("button", { name: /Déclencher un pic/ });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Déclencher un pic/ }));
+    });
+
+    expect(triggerSpike).toHaveBeenCalledWith(
+      expect.objectContaining({ siteId: "SITE-001" }),
+    );
+    // Deux lectures : le montage, puis celle que le déclenchement provoque.
+    await waitFor(() => {
+      expect(fetchSpikes).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("relit le référentiel après une synchronisation", async () => {
+    renderPage({ role: "writer" });
+    await screen.findByRole("button", { name: "Recharger les sites" });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Recharger les sites" }));
+    });
+
+    expect(syncSites).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(fetchSites).toHaveBeenCalledTimes(2);
+    });
+    expect(
+      screen.getByText("7 site(s) synchronisé(s) sur 7 annoncé(s) par la source"),
+    ).toBeDefined();
+  });
+
+  it("nomme le refus quand la source rejette le pic", async () => {
+    triggerSpike.mockRejectedValue(
+      new ApiError("L'API métier a renvoyé une erreur serveur (502).", 502),
+    );
+
+    renderPage({ role: "writer" });
+    await screen.findByRole("button", { name: /Déclencher un pic/ });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Déclencher un pic/ }));
+    });
+
+    const alerts = await screen.findAllByRole("alert");
+    expect(
+      alerts.some((alert) => alert.textContent?.includes("Commande refusée")),
+    ).toBe(true);
   });
 });
