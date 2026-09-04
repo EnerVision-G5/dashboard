@@ -13,6 +13,11 @@ jeton obtenu signe tous les appels, et le dashboard est mis en page d'après la
 maquette « Smart Energy Optimiser » — consommation temps réel, recommandations,
 indicateurs.
 
+**EV-18** y ajoute un bandeau qui qualifie les données affichées — fraîcheur de
+l'ingestion, part de mesures dégradées, état des capteurs — pour qu'aucune
+décision ne soit prise sur des données incomplètes sans le savoir. Voir
+[Bandeau de fraîcheur et de qualité des données](#bandeau-de-fraîcheur-et-de-qualité-des-données).
+
 Le dashboard ne parle qu'à des services EnerVision : l'API métier pour les
 sites et les mesures, le service d'inférence pour la prédiction. **Il n'appelle
 jamais l'API Mock IoT directement.**
@@ -202,17 +207,80 @@ localisation du site choisi, puis trois zones.
 
 | Zone | Source | État |
 | --- | --- | --- |
+| Fraîcheur et qualité | `GET /indicators` et `GET /sites/{id}/sensors`, rafraîchis toutes les 60 s | Servie |
 | Consommation temps réel | `GET /sites/{id}/readings/latest`, rafraîchi toutes les 30 s | Servie |
 | Recommandations | aucune | Vide, voir ci-dessous |
 | Indicateurs | graphique consommation / prédiction d'EV-16 | Servi |
+
+### Bandeau de fraîcheur et de qualité des données
+
+**EV-18** pose au-dessus des trois zones un bandeau qui qualifie ce qu'elles
+affichent. Il répond à une question simple : *puis-je décider sur la base de ce
+que je vois ?*
+
+| Source | Portée |
+| --- | --- |
+| `GET /indicators?window_hours=24` | les sept sites, en une requête |
+| `GET /sites/{id}/sensors` | le site affiché seulement |
+
+Le contrat **1.5.0** a rendu ce ticket possible. Il publie non seulement les
+indicateurs, mais **le seuil qui qualifie chacun d'eux** —
+`stale_threshold_seconds` pour la fraîcheur, `threshold` pour la part dégradée
+— ainsi que les verdicts `is_stale`, `exceeds_threshold` et la synthèse
+`overall` des capteurs. Le dashboard les relit ; **il ne choisit aucun seuil**,
+sans quoi un seuil révisé côté exploitation devrait être suivi à deux endroits.
+
+Trois niveaux, dans le vocabulaire du contrat :
+
+| Niveau | Ce qui le déclenche | Traitement |
+| --- | --- | --- |
+| `ok` | aucun constat | ligne sobre, sans rôle vivant : rien à annoncer |
+| `degraded` | retard d'ingestion, part dégradée au-delà du seuil, fenêtre non qualifiée, panne de capteur | famille « estimation », `role="status"` |
+| `critical` | site sans aucune mesure, perte réseau | famille « alerte », `role="alert"` |
+
+Quatre décisions valent d'être expliquées.
+
+**Le bandeau est affiché en permanence**, pas seulement en cas d'incident. Un
+bandeau qui n'apparaît qu'en cas de problème est indiscernable d'un bandeau en
+panne : rien à l'écran ne dirait alors si les données sont saines ou si la
+vérification a échoué. L'état sain porte donc l'heure du dernier calcul servi
+par l'API.
+
+**Un site muet n'est pas un site en retard.** Le contrat les distingue par
+`last_measure_at`, et le second est moins grave que le premier : un site qui ne
+mesure plus rien est `critical`, un site en retard est `degraded`.
+
+**Une fenêtre non qualifiée n'est pas une fenêtre saine.** `data_quality` vaut
+`good` par défaut : une fenêtre que l'ETL n'a pas encore traitée affiche donc
+0 % de dégradation sans rien valoir. `qualified_ratio` le dit, et le bandeau le
+signale plutôt que de présenter le site comme propre — c'est précisément ce que
+le ticket cherche à empêcher.
+
+**Les deux flux échouent indépendamment.** Des capteurs indisponibles
+n'effacent pas une fraîcheur correctement lue, et le flux manquant est nommé.
+Quand les deux tombent, le bandeau annonce son ignorance : il ne dit jamais que
+tout va bien faute d'avoir pu vérifier.
+
+Le bandeau est rafraîchi toutes les 60 secondes. Ce n'est pas un ornement : la
+fraîcheur se dégrade toute seule, et un bandeau figé finirait par affirmer que
+les données sont à jour dix minutes après la chute de l'ingestion.
+
+**Limite connue :** l'état des capteurs n'est lu que pour le site affiché, le
+contrat ne publiant pas de route capteurs pour le parc. Sept requêtes en
+parallèle à chaque rafraîchissement coûteraient plus que ce que le bandeau en
+tirerait ; le besoin est remonté plutôt que contourné. La fraîcheur et la
+qualité, elles, couvrent bien les sept sites.
 
 **Consommation temps réel** affiche la puissance instantanée, puis la tension,
 l'intensité, la température et l'humidité — toutes issues de la même
 `EnergyReadingOut`. Une valeur `null` y est affichée comme absente (`—`), jamais
 comme un zéro, et la valeur imputée par l'ETL n'est jamais substituée au relevé :
 elle est mentionnée pour ce qu'elle est. Une mesure vieille de plus de deux
-minutes signale un retard d'ingestion (seuil du guide d'intégration ; le bandeau
-de fraîcheur complet, par capteur, relève d'EV-18).
+minutes signale un retard d'ingestion. Ce seuil-là vient du guide
+d'intégration et reste écrit dans `src/api/readings.ts` ; le bandeau d'EV-18,
+lui, tient le sien de l'API. Les aligner — c'est-à-dire faire lire à ce panneau
+le `stale_threshold_seconds` du contrat — relève d'**EV-52**, qui reprend le
+panneau temps réel.
 
 **Recommandations** tient sa place dans la mise en page sans rien afficher : le
 contrat gelé 1.0.0 ne publie aucune route de recommandations. Celle qui est
@@ -348,8 +416,20 @@ Les types de `src/types` sont générés depuis les contrats OpenAPI gelés du r
 npm run gen:types
 ```
 
-- `openapi-api.json` produit `src/types/api.d.ts` (sites, mesures, alertes, auth).
-- `openapi-predict.json` produit `src/types/predict.d.ts` (prédictions).
+- `openapi-api.json` produit `src/types/api.d.ts`. Le contrat **1.5.0** y
+  ajoute les indicateurs de confiance, l'état et l'historique des capteurs, les
+  recommandations, le registre des modèles, les simulations de pic, et les
+  champs `excluded` / `exclusion_reason` sur chaque mesure. Aucun champ n'a
+  disparu au passage depuis le 1.1.0, et aucun paramètre n'a changé : le code
+  déjà livré n'a pas été touché.
+
+> **Chemin contenant une espace.** `scripts/gen-types.mjs` appelait le
+> générateur par `npx` dans un shell, qui ne reçoit pas les arguments échappés :
+> un chemin de projet comportant une espace y était coupé au premier blanc, si
+> bien que les types atterrissaient silencieusement dans un fichier portant la
+> première moitié du chemin — `src/types/api.d.ts` restant inchangé, sans la
+> moindre erreur. Le script exécute désormais le fichier du générateur avec le
+> Node courant, sans shell.
 
 Le script résout le dossier des contrats à `../docs/contracts`, position du
 dashboard monté en submodule dans `enervision`. Si le dashboard est cloné
