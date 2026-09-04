@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   RECOMMENDATIONS_HORIZON_HOURS,
   fetchRecommendations,
+  isDegraded,
   recommendationsPath,
 } from "./recommendations";
 import { ApiError } from "./http";
-import { createFakeClient, makeRecommendations } from "../test/doubles";
+import {
+  createFakeClient,
+  makeRecommendation,
+  makeRecommendations,
+} from "../test/doubles";
 
 describe("recommendationsPath", () => {
   it("suit le chemin du contrat gelé", () => {
@@ -70,5 +75,30 @@ describe("fetchRecommendations", () => {
     await expect(
       fetchRecommendations({ client: instance, siteId: "SITE-404" }),
     ).rejects.toThrow("Site inconnu de l'API métier (404).");
+  });
+});
+
+describe("isDegraded", () => {
+  it("est vrai quand des actions sont servies sans version de modèle", () => {
+    // Mode dégradé de l'API : le service d'inférence est indisponible, seule
+    // la règle capteur — indépendante de la prévision — a pu s'appliquer.
+    expect(
+      isDegraded(
+        makeRecommendations({
+          model_version: null,
+          items: [makeRecommendation({ type: "sensor_failure" })],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("est faux quand une version de modèle fonde les actions", () => {
+    expect(isDegraded(makeRecommendations())).toBe(false);
+  });
+
+  it("est faux sur une liste vide, qui n'est pas un mode dégradé", () => {
+    // Aucune action et aucune prévision : c'est une absence, pas un service
+    // qui tourne en repli.
+    expect(isDegraded(makeRecommendations({ items: [], model_version: null }))).toBe(false);
   });
 });

@@ -46,6 +46,29 @@ export function recommendationsPath(siteId: string): string {
   return `/api/v1/sites/${encodeURIComponent(siteId)}/recommendations`;
 }
 
+/**
+ * Vrai quand des actions sont proposées **sans aucune prévision** derrière.
+ *
+ * C'est le mode dégradé de l'API : lorsque le service d'inférence est
+ * indisponible — 503 tant qu'aucun modèle n'est publié au registre MLflow,
+ * cas courant aujourd'hui — la route ne propage pas l'erreur. Elle répond 200
+ * et sert la seule règle qui ne dépend pas de la prévision, la panne de
+ * capteur, avec `model_version` à `null`.
+ *
+ * **Le contrat 1.5.0 ne publie aucun champ `degraded`.** L'état est donc
+ * déduit, et il l'est du seul signal structurel disponible : des actions
+ * servies alors qu'aucune version de modèle ne les fonde. Le champ `detail`
+ * dit la même chose en français, mais s'appuyer sur son texte casserait à la
+ * première reformulation côté API. Si ce mode doit devenir explicite, c'est
+ * une PR de contrat — pas un champ inventé ici.
+ */
+export function isDegraded(recommendations: Recommendations): boolean {
+  return (
+    recommendations.items.length > 0 &&
+    (recommendations.model_version === null || recommendations.model_version === undefined)
+  );
+}
+
 interface FetchRecommendationsOptions {
   client: AxiosInstance;
   siteId: string;
