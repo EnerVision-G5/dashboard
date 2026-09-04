@@ -11,7 +11,8 @@ et sa **prédiction** sur les 24 heures suivantes.
 **EV-48** y ajoute l'authentification : une page de connexion garde l'entrée, le
 jeton obtenu signe tous les appels, et le dashboard est mis en page d'après la
 maquette « Smart Energy Optimiser » — consommation temps réel, recommandations,
-indicateurs.
+indicateurs. **EV-50** réunit les écrans authentifiés derrière une barre de
+navigation commune, voir [Navigation](#navigation).
 
 Le dashboard ne parle qu'à des services EnerVision : l'API métier pour les
 sites et les mesures, le service d'inférence pour la prédiction. **Il n'appelle
@@ -194,11 +195,43 @@ aucun endpoint de profil. La signature n'est pas vérifiée côté navigateur et
 peut pas l'être : la clé HS256 est le secret de l'API. Ce décodage sert à
 l'affichage et à l'échéance, jamais à autoriser quoi que ce soit.
 
+## Navigation
+
+**EV-50** pose une barre de navigation commune à tous les écrans authentifiés.
+Elle porte l'identité du produit, les destinations, l'utilisateur connecté et la
+déconnexion — un seul endroit, pour qu'un second écran n'apporte pas une
+deuxième barre.
+
+| Destination | Adresse | État |
+| --- | --- | --- |
+| Dashboard | `/` | Servie |
+| Configuration | `/config` | Coquille, contenu attendu par EV-55 |
+
+La page affichée est signalée de trois façons : par le poids du texte, par un
+fond, et par `aria-current="page"` — le seul repère qu'un lecteur d'écran
+puisse annoncer. La couleur ne porte jamais seule cette information, le design
+system l'interdit.
+
+Le lien vers le dashboard exige une correspondance **exacte** (`end`) : servi
+sur `/`, préfixe de toute autre adresse, il resterait sinon actif sur la page
+de configuration.
+
+La garde de session et la barre sont portées par une route parente,
+`AuthenticatedLayout` : un écran ajouté sous elle hérite des deux sans rien
+déclarer, et ne peut donc pas être oublié hors authentification. Le
+durcissement complet, rôles compris, reste le périmètre d'**EV-49**.
+
+La page `/config` est servie dès maintenant, mais **n'affiche aucun
+paramètre**. Un lien de navigation qui retomberait sur la règle `*` ramènerait
+au dashboard sans rien dire, ce qui se lit comme une panne ; à l'inverse, un
+formulaire posé là aujourd'hui promettrait une persistance que le contrat gelé
+1.1.0 ne publie pas. L'écran dit donc ce qu'il en est et renvoie à **EV-55**.
+
 ## Écran de supervision
 
-La mise en page suit la maquette « Smart Energy Optimiser » : un en-tête portant
-le titre, le sélecteur de site et — à droite — la puissance souscrite et la
-localisation du site choisi, puis trois zones.
+La mise en page suit la maquette « Smart Energy Optimiser » : sous la barre de
+navigation, un en-tête portant le sélecteur de site et — à droite — la puissance
+souscrite et la localisation du site choisi, puis trois zones.
 
 | Zone | Source | État |
 | --- | --- | --- |
