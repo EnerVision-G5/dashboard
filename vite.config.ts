@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react'
-import { loadEnv, type ProxyOptions } from 'vite'
+import { loadEnv, type Plugin, type ProxyOptions } from 'vite'
 import { defineConfig } from 'vitest/config'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -33,11 +33,36 @@ function devProxy(env: Record<string, string>): Record<string, ProxyOptions> {
   return routes
 }
 
+/**
+ * Sert /config.js en développement.
+ *
+ * En image, ce fichier est produit au démarrage du conteneur par envsubst et
+ * servi par Nginx. Le serveur de développement, lui, ne le connaît pas : sans
+ * ce greffon, index.html déclencherait un 404 à chaque chargement de page.
+ *
+ * Il rend une configuration vide, jamais des adresses : en développement la
+ * source de vérité reste le .env, lu par import.meta.env. Y injecter des
+ * valeurs ici créerait une seconde vérité, et un écart possible entre ce qu'on
+ * teste et ce qu'on déploie.
+ */
+function devConfigJs(): Plugin {
+  return {
+    name: 'enervision-dev-config-js',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/config.js', (_req, res) => {
+        res.setHeader('Content-Type', 'application/javascript')
+        res.end('window.__ENERVISION_CONFIG__ = {}\n')
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), devConfigJs()],
     server: {
       // Écoute sur toutes les interfaces : joignable depuis l'hôte quand on
       // tourne dans un container Docker.

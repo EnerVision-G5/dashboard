@@ -18,13 +18,21 @@ import {
   YAxis,
 } from "recharts";
 import type { ChartPoint } from "../lib/series";
+import { token } from "../ui/tokens";
 
 /** Libellés des deux séries, partagés avec la légende et le survol. */
 export const ACTUAL_SERIES_LABEL = "Consommation réelle (kW)";
 export const PREDICTED_SERIES_LABEL = "Prédiction (kW)";
 
-const ACTUAL_COLOR = "#0f766e";
-const PREDICTED_COLOR = "#b45309";
+/**
+ * Couleurs des deux séries, lues sur les jetons du design system.
+ *
+ * Elles étaient écrites en dur, et l'étaient sur les valeurs de Tailwind v3
+ * alors que le projet est passé en v4 : la courbe avait cessé d'avoir la
+ * couleur des commandes de la même famille sans que personne le voie.
+ */
+const ACTUAL_COLOR = token("mesure");
+const PREDICTED_COLOR = token("estimation");
 
 const TIME_FORMAT = new Intl.DateTimeFormat("fr-FR", {
   hour: "2-digit",
@@ -100,21 +108,21 @@ export function ConsumptionPredictionChart({
       <div className="h-80 w-full sm:h-96" role="img" aria-label={description}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={points as ChartPoint[]} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-            <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+            <CartesianGrid stroke={token("grille")} strokeDasharray="3 3" />
             <XAxis
               dataKey="timestamp"
               type="number"
               scale="time"
               domain={["dataMin", "dataMax"]}
               tickFormatter={(value: number) => TIME_FORMAT.format(new Date(value))}
-              stroke="#475569"
+              stroke={token("axe")}
               tick={{ fontSize: 12 }}
             />
             <YAxis
-              stroke="#475569"
+              stroke={token("axe")}
               tick={{ fontSize: 12 }}
               width={64}
-              label={{ value: "kW", angle: -90, position: "insideLeft", fill: "#475569" }}
+              label={{ value: "kW", angle: -90, position: "insideLeft", fill: token("axe") }}
             />
             <Tooltip content={<SeriesTooltip />} />
             <Legend />

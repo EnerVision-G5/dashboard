@@ -10,19 +10,23 @@
  *   - la requête précédente est annulée à chaque changement de site ;
  *   - les deux flux échouent indépendamment. Une prévision indisponible n'efface
  *     pas des mesures correctement reçues, et réciproquement.
+ *
+ * Les deux flux interrogent la même API : les mesures sur la fenêtre écoulée,
+ * les prédictions sur la fenêtre à venir. Le dashboard ne parle plus au
+ * service d'inférence, un job planifié de l'API s'en charge.
  */
 
 import { useEffect, useState } from "react";
 import type { Prediction } from "../api/predictions";
 import type { ChartPoint } from "../lib/series";
-import { fetchPrediction } from "../api/predictions";
+import { fetchPredictions } from "../api/predictions";
 import { buildDemoPrediction } from "../fixtures/predictionDemo";
 import { getPredictionSource, type PredictionSource } from "../config/env";
 import { fetchReadings } from "../api/readings";
-import { getApiClient, getPredictClient } from "../api/clients";
+import { getApiClient } from "../api/clients";
 import { isCancellation } from "../api/http";
 import { buildChartSeries } from "../lib/series";
-import { DEFAULT_WINDOW_HOURS, recentWindow } from "../lib/timeWindow";
+import { DEFAULT_WINDOW_HOURS, forecastWindow, recentWindow } from "../lib/timeWindow";
 
 /** État exposé par `useSiteSeries`. */
 export interface SiteSeriesState {
@@ -76,7 +80,11 @@ export function useSiteSeries(siteId: string | null): SiteSeriesState {
     let active = true;
 
     async function load(currentSiteId: string, source: PredictionSource): Promise<void> {
-      const { startTime, endTime } = recentWindow(new Date(), DEFAULT_WINDOW_HOURS);
+      const now = new Date();
+      const { startTime, endTime } = recentWindow(now, DEFAULT_WINDOW_HOURS);
+      // Les prédictions portent sur l'avenir : leur fenêtre part de maintenant
+      // au lieu d'y aboutir, sinon la requête ne rencontrerait aucun point.
+      const forecast = forecastWindow(now, DEFAULT_WINDOW_HOURS);
       const [readings, prediction] = await Promise.allSettled([
         fetchReadings({
           client: getApiClient(),
@@ -89,9 +97,11 @@ export function useSiteSeries(siteId: string | null): SiteSeriesState {
         // mode `api`, aucun repli n'est prévu : un échec reste un échec.
         source === "fixture"
           ? Promise.resolve(buildDemoPrediction(currentSiteId, endTime))
-          : fetchPrediction({
-              client: getPredictClient(),
+          : fetchPredictions({
+              client: getApiClient(),
               siteId: currentSiteId,
+              startTime: forecast.startTime,
+              endTime: forecast.endTime,
               signal: controller.signal,
             }),
       ]);

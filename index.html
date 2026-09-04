@@ -8,6 +8,17 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      Configuration injectée au démarrage du conteneur (EV-64). Chargée AVANT le
+      bundle, et volontairement sans `type="module"` ni `defer` : les scripts
+      classiques s'exécutent dans l'ordre du document, celui-ci a donc posé
+      window.__ENERVISION_CONFIG__ avant que le module ne démarre.
+
+      En développement, un greffon de vite.config.ts sert une configuration
+      vide : l'application retombe alors sur le .env, et la console reste
+      propre.
+    -->
+    <script src="/config.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

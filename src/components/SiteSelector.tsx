@@ -1,14 +1,18 @@
 /**
  * Sélecteur de site.
  *
- * Un `<select>` natif plutôt qu'une liste maison : le clavier, le focus et les
- * lecteurs d'écran fonctionnent sans code supplémentaire.
+ * Repose sur `SelectField` du design system : un `<select>` natif, dont le
+ * clavier, le focus et la restitution par les lecteurs d'écran fonctionnent
+ * sans code supplémentaire. Le composant ne garde que ce qui lui est propre —
+ * la mise en forme d'un site en option, et le libellé de l'état vide.
  */
 
+import { useMemo } from "react";
 import type { Site } from "../api/sites";
+import { SelectField } from "../ui/Field";
 
-/** Identifiant du champ, partagé avec son `<label>`. */
-export const SITE_SELECTOR_ID = "site-selector";
+/** Étiquette du champ, partagée avec les tests et la page. */
+export const SITE_SELECTOR_LABEL = "Site";
 
 interface SiteSelectorProps {
   sites: readonly Site[];
@@ -25,31 +29,33 @@ export function SiteSelector({
 }: SiteSelectorProps) {
   const isEmpty = sites.length === 0;
 
+  const options = useMemo(
+    () =>
+      sites.map((site) => ({
+        value: site.site_id,
+        label: `${site.site_name} — ${site.location}`,
+      })),
+    [sites],
+  );
+
+  // L'option de remplacement ne s'affiche que quand la liste ne peut rien
+  // proposer : elle dit alors pourquoi, plutôt que de laisser un champ vide.
+  const placeholder = isLoading
+    ? "Chargement des sites…"
+    : isEmpty
+      ? "Aucun site disponible"
+      : undefined;
+
   return (
-    <div className="flex flex-col gap-1">
-      <label
-        htmlFor={SITE_SELECTOR_ID}
-        className="text-sm font-medium text-slate-700"
-      >
-        Site
-      </label>
-      <select
-        id={SITE_SELECTOR_ID}
-        className="min-w-64 rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-teal-700 focus:ring-2 focus:ring-teal-700 focus:outline-none disabled:bg-slate-100 disabled:text-slate-500"
-        value={selectedSiteId ?? ""}
-        onChange={(event) => {
-          onSelect(event.target.value);
-        }}
-        disabled={isLoading || isEmpty}
-      >
-        {isLoading && <option value="">Chargement des sites…</option>}
-        {!isLoading && isEmpty && <option value="">Aucun site disponible</option>}
-        {sites.map((site) => (
-          <option key={site.site_id} value={site.site_id}>
-            {site.site_name} — {site.location}
-          </option>
-        ))}
-      </select>
-    </div>
+    <SelectField
+      label={SITE_SELECTOR_LABEL}
+      options={options}
+      placeholder={placeholder}
+      value={selectedSiteId ?? ""}
+      onChange={(event) => {
+        onSelect(event.target.value);
+      }}
+      disabled={isLoading || isEmpty}
+    />
   );
 }

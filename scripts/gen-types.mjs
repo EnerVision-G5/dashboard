@@ -11,6 +11,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,10 +21,11 @@ const contractsDir = resolve(
   process.env.CONTRACTS_DIR ?? "../docs/contracts",
 );
 
-const targets = [
-  { contract: "openapi-api.json", output: "src/types/api.d.ts" },
-  { contract: "openapi-predict.json", output: "src/types/predict.d.ts" },
-];
+// Une seule cible : le dashboard ne parle qu'à l'API métier. Les prédictions
+// sont lues sur sa route de lecture, plus sur le service d'inférence, dont le
+// contrat reste la référence entre api et predict mais ne concerne plus le
+// front.
+const targets = [{ contract: "openapi-api.json", output: "src/types/api.d.ts" }];
 
 const missing = targets
   .map(({ contract }) => resolve(contractsDir, contract))
@@ -44,12 +46,24 @@ if (missing.length > 0) {
 
 mkdirSync(resolve(projectRoot, "src/types"), { recursive: true });
 
+// Le générateur est appelé par son fichier, exécuté par le Node courant, et
+// non par « npx » dans un shell. Sur Windows, npx n'est atteignable que via un
+// shell, et un shell ne reçoit pas les arguments échappés : un chemin de projet
+// contenant une espace y était coupé au premier blanc, si bien que les types
+// atterrissaient dans un fichier portant la première moitié du chemin — sans
+// aucune erreur, le fichier attendu restant inchangé.
+const require = createRequire(import.meta.url);
+const generator = resolve(
+  dirname(require.resolve("openapi-typescript/package.json")),
+  "bin/cli.js",
+);
+
 for (const { contract, output } of targets) {
   const source = resolve(contractsDir, contract);
   console.log(`${contract} -> ${output}`);
   execFileSync(
-    "npx",
-    ["--no-install", "openapi-typescript", source, "-o", resolve(projectRoot, output)],
-    { cwd: projectRoot, stdio: "inherit", shell: process.platform === "win32" },
+    process.execPath,
+    [generator, source, "-o", resolve(projectRoot, output)],
+    { cwd: projectRoot, stdio: "inherit" },
   );
 }

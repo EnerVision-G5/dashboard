@@ -64,6 +64,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/indicators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lister les indicateurs de confiance de tous les sites */
+        get: operations["list_indicators_api_v1_indicators_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lister les modèles du registre */
+        get: operations["list_models_api_v1_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/models/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consulter le modèle actuellement promu */
+        get: operations["get_current_model_api_v1_models_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/simulations/spike": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lister les pics de consommation simulés */
+        get: operations["list_spikes_api_v1_simulations_spike_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/simulations/spike/{site_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Déclencher un pic de consommation sur un site */
+        post: operations["trigger_spike_api_v1_simulations_spike__site_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sites": {
         parameters: {
             query?: never;
@@ -81,6 +166,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sites/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Synchroniser le référentiel des sites depuis la source */
+        post: operations["sync_sites_api_v1_sites_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sites/{site_id}": {
         parameters: {
             query?: never;
@@ -90,6 +192,40 @@ export interface paths {
         };
         /** Consulter un site */
         get: operations["get_site_api_v1_sites__site_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{site_id}/indicators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consulter les indicateurs de confiance d'un site */
+        get: operations["get_site_indicators_api_v1_sites__site_id__indicators_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{site_id}/predictions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lister les prédictions d'un site sur une fenêtre de temps */
+        get: operations["list_predictions_api_v1_sites__site_id__predictions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -132,13 +268,148 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sites/{site_id}/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Proposer des actions à partir de la prévision d'un site */
+        get: operations["list_recommendations_api_v1_sites__site_id__recommendations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{site_id}/sensors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consulter l'état des capteurs d'un site */
+        get: operations["list_sensors_api_v1_sites__site_id__sensors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{site_id}/sensors/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lister les pannes de capteur d'un site */
+        get: operations["list_sensor_failures_api_v1_sites__site_id__sensors_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AccuracyIndicatorOut
+         * @description Écart entre les prévisions servies et la consommation réellement mesurée.
+         *
+         *     Détecteur de dérive côté exploitation. La comparaison porte sur les
+         *     prévisions ARCHIVÉES, c'est-à-dire celles qui ont réellement été servies,
+         *     récursives sur leur horizon. Ce n'est pas le même nombre que la
+         *     surveillance de dérive du repo predict, qui mesure l'erreur à un pas sur
+         *     les décalages réels : celle-là juge le modèle, celle-ci juge ce que le
+         *     client a reçu, et elle sera toujours la moins flatteuse des deux.
+         *
+         *     Règle d'appariement, publiée parce qu'elle décide du chiffre : les mesures
+         *     sont moyennées par heure, les prévisions rattachées à l'heure de leur
+         *     horodatage cible. Une heure sans aucune mesure de puissance BRUTE ne forme
+         *     pas de paire — comparer une prévision à une valeur imputée mesurerait la
+         *     dérive de l'ETL, pas celle du modèle.
+         *
+         *     Pas de MAPE : elle explose quand la consommation approche zéro, et une
+         *     seule heure creuse suffirait à rendre l'indicateur illisible. Le biais
+         *     signé la remplace utilement, en donnant la direction de l'erreur.
+         */
+        AccuracyIndicatorOut: {
+            /**
+             * Bias Kw
+             * @description Moyenne de prédit moins réel, en kilowatts. Signée à dessein : c'est elle qui dit si le modèle surestime ou sous-estime, ce qu'une erreur absolue ne peut pas dire.
+             */
+            bias_kw: number | null;
+            /**
+             * Bounded Points
+             * @description Heures appariées dont la prévision portait un intervalle. within_bounds_ratio porte sur celles-là seulement.
+             */
+            bounded_points: number;
+            /**
+             * Drift
+             * @description Vrai quand mae_kw dépasse drift_threshold_ratio fois mean_actual_kw. Faux quand aucune paire n'existe : rien n'a été mesuré, ce n'est pas une absence de dérive mais elle ne doit pas être annoncée.
+             */
+            drift: boolean;
+            /**
+             * Drift Threshold Ratio
+             * @description Rapport toléré entre l'erreur et la consommation moyenne, servi ici pour que le dashboard ne le redéclare pas.
+             */
+            drift_threshold_ratio: number;
+            /**
+             * Mae Kw
+             * @description Erreur absolue moyenne en kilowatts. La MAE plutôt que la RMSE : elle s'exprime dans l'unité du compteur, ce qui se discute avec un exploitant.
+             */
+            mae_kw: number | null;
+            /**
+             * Mean Actual Kw
+             * @description Consommation réelle moyenne sur les heures appariées, en kilowatts. Sert de référence à drift : une erreur ne se juge pas en valeur absolue.
+             */
+            mean_actual_kw: number | null;
+            /**
+             * Model Versions
+             * @description Versions de modèle ayant produit les prévisions comparées, triées. Plus d'une entrée signale une fenêtre à cheval sur une promotion : l'écart mêle alors deux modèles.
+             */
+            model_versions: string[];
+            /**
+             * Paired Points
+             * @description Heures pour lesquelles une prévision et une mesure brute existent toutes deux. Zéro rend les autres champs nuls, et c'est le cas courant tant qu'aucune prévision n'est archivée.
+             */
+            paired_points: number;
+            /**
+             * Window End
+             * Format: date-time
+             * @description Borne supérieure incluse de la fenêtre, ISO 8601 UTC.
+             */
+            window_end: string;
+            /**
+             * Window Start
+             * Format: date-time
+             * @description Borne inférieure incluse de la fenêtre, ISO 8601 UTC.
+             */
+            window_start: string;
+            /**
+             * Within Bounds Ratio
+             * @description Part des mesures tombant dans l'intervalle de confiance annoncé, entre 0 et 1. Nulle quand aucune prévision appariée ne porte de bornes.
+             */
+            within_bounds_ratio: number | null;
+        };
+        /**
          * AlertOut
          * @description Alerte énergétique, miroir de l'alerte de l'API Mock IoT.
+         *
+         *     `timestamp` date le déclenchement côté source, pas la collecte. Les deux
+         *     s'écartent dès qu'un collecteur a été arrêté, et c'est le déclenchement
+         *     qui intéresse le consommateur.
          */
         AlertOut: {
             /**
@@ -164,9 +435,9 @@ export interface components {
             site_id: string;
             /**
              * Threshold
-             * @description Seuil dont le dépassement a déclenché l'alerte.
+             * @description Seuil dont le dépassement a déclenché l'alerte, nul si non servi.
              */
-            threshold: number;
+            threshold?: number | null;
             /**
              * Timestamp
              * Format: date-time
@@ -181,9 +452,9 @@ export interface components {
             type: "spike" | "threshold" | "anomaly" | "outage" | "sensor";
             /**
              * Value
-             * @description Valeur mesurée ayant déclenché l'alerte.
+             * @description Valeur mesurée ayant déclenché l'alerte, nulle si non servie.
              */
-            value: number;
+            value?: number | null;
         };
         /** Body_create_token_api_v1_auth_token_post */
         Body_create_token_api_v1_auth_token_post: {
@@ -208,6 +479,53 @@ export interface components {
             scope: string;
             /** Username */
             username: string;
+        };
+        /**
+         * CollectorStateOut
+         * @description Ce que le collecteur dit de lui-même pour un site.
+         *
+         *     Nul quand aucune ligne n'existe : le collecteur n'a jamais tourné sur ce
+         *     site, ou la migration `06_ingestion_etat.sql` n'est pas appliquée. Les
+         *     deux se disent « je ne sais pas », jamais « tout va bien ».
+         */
+        CollectorStateOut: {
+            /**
+             * Consecutive Failures
+             * @description Échecs consécutifs depuis le dernier succès. Remis à zéro par un succès : il distingue l'à-coup de la panne installée.
+             */
+            consecutive_failures: number;
+            /**
+             * Last Attempt At
+             * Format: date-time
+             * @description Dernier essai de collecte, abouti ou non, ISO 8601 UTC. Comparé à last_success_at : égaux, la collecte va bien ; écartés, elle tourne et échoue.
+             */
+            last_attempt_at: string;
+            /**
+             * Last Data Lag Seconds
+             * @description Âge de la mesure servie par la source au dernier essai abouti, mesuré par le collecteur. Distinct de ingestion_lag_seconds, qui mesure le retard de l'écriture.
+             */
+            last_data_lag_seconds: number | null;
+            /**
+             * Last Error
+             * @description Cause du dernier échec. Conservée après un succès : savoir de quoi un site relève a une valeur.
+             */
+            last_error: string | null;
+            /**
+             * Last Rows
+             * @description Lignes soumises par le dernier essai abouti. Zéro est une réponse valable : la source a répondu, elle n'avait rien de nouveau.
+             */
+            last_rows: number;
+            /**
+             * Last Success At
+             * @description Dernier essai abouti, ISO 8601 UTC. Nul tant qu'aucun n'a réussi.
+             */
+            last_success_at: string | null;
+            /**
+             * Source
+             * @description Point d'entrée ayant écrit cet état : poller pour la collecte continue, backfill pour un rattrapage manuel.
+             * @enum {string}
+             */
+            source: "poller" | "backfill";
         };
         /**
          * EnergyReadingOut
@@ -243,6 +561,17 @@ export interface components {
              * @enum {string}
              */
             data_quality: "good" | "partial" | "degraded" | "critical";
+            /**
+             * Excluded
+             * @description Vrai si la mesure a été écartée des calculs agrégés. Une mesure écartée reste servie telle quelle : c'est le consommateur qui décide de la retirer de ses moyennes, pas l'API de la cacher.
+             * @default false
+             */
+            excluded: boolean;
+            /**
+             * Exclusion Reason
+             * @description Motif de la mise à l'écart, nul si la mesure n'est pas écartée. Distinct de null_reasons, qui dit ce qui manquait à la mesure là où celui-ci dit pourquoi elle a été jugée inexploitable.
+             */
+            exclusion_reason?: string | null;
             /**
              * Humidity Percent
              * @description Humidité relative relevée en pourcentage.
@@ -325,6 +654,95 @@ export interface components {
             timestamp: string;
         };
         /**
+         * IngestionIndicatorOut
+         * @description Fraîcheur de la dernière ingestion d'un site.
+         *
+         *     Deux horloges, et il faut les deux. L'âge de la mesure dit si la donnée
+         *     décrit encore le présent. Le retard d'écriture dit si la chaîne suit. Un
+         *     collecteur arrêté et un collecteur qui rattrape du retard donnent la même
+         *     valeur sur la première et deux valeurs très différentes sur la seconde.
+         */
+        IngestionIndicatorOut: {
+            /** @description État que le collecteur publie pour ce site. Nul quand il n'a jamais tourné dessus : c'est la seule chose que les mesures ne peuvent pas dire, un collecteur arrêté n'écrivant aucune ligne. */
+            collector: components["schemas"]["CollectorStateOut"] | null;
+            /**
+             * Ingestion Lag Seconds
+             * @description Délai entre la mesure la plus récente et son écriture en base, en secondes. Mesure ce que la chaîne a mis à la charger, pas ce que la source a mis à la servir.
+             */
+            ingestion_lag_seconds: number | null;
+            /**
+             * Is Stale
+             * @description Vrai quand la mesure la plus récente dépasse le seuil, ou quand le site n'a aucune mesure. Un âge inconnu n'est jamais tenu pour frais.
+             */
+            is_stale: boolean;
+            /**
+             * Last Ingested At
+             * @description Horodatage de la dernière écriture en base, ISO 8601 UTC. Peut être bien postérieur à last_measure_at après un rattrapage.
+             */
+            last_ingested_at: string | null;
+            /**
+             * Last Measure At
+             * @description Horodatage de la mesure la plus récente du site, ISO 8601 UTC. Nul quand le site n'a aucune mesure.
+             */
+            last_measure_at: string | null;
+            /**
+             * Measure Age Seconds
+             * @description Âge de la mesure la plus récente au moment de la réponse, en secondes.
+             */
+            measure_age_seconds: number | null;
+            /**
+             * Stale Threshold Seconds
+             * @description Seuil au-delà duquel l'ingestion est tenue pour en retard, servi ici pour que le dashboard ne le redéclare pas.
+             */
+            stale_threshold_seconds: number;
+        };
+        /**
+         * ModelOut
+         * @description Modèle du registre, miroir applicatif du Model Registry MLflow.
+         *
+         *     Alimenté par le service d'entraînement à chaque promotion, jamais par
+         *     l'API. `actif` désigne la version servie : il en existe au plus une, et
+         *     c'est elle qui fonde les prévisions et les recommandations.
+         */
+        ModelOut: {
+            /**
+             * Actif
+             * @description Vrai pour la version actuellement promue.
+             */
+            actif: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             * @description Entrée de la ligne dans le registre, ISO 8601 UTC.
+             */
+            created_at: string;
+            /**
+             * Date Entrainement
+             * @description Horodatage du run d'entraînement, ISO 8601 UTC. Distinct de created_at, qui date l'entrée de la ligne dans le registre.
+             */
+            date_entrainement?: string | null;
+            /**
+             * Mlflow Run Id
+             * @description Run MLflow ayant produit le modèle, pour la traçabilité.
+             */
+            mlflow_run_id?: string | null;
+            /**
+             * Modele Id
+             * @description Identifiant technique du modèle.
+             */
+            modele_id: number;
+            /**
+             * Nom
+             * @description Nom du modèle, par exemple enervision_xgboost.
+             */
+            nom: string;
+            /**
+             * Version
+             * @description Version, telle que le registre MLflow la nomme.
+             */
+            version: string;
+        };
+        /**
          * PaginationMeta
          * @description Métadonnées de pagination accompagnant toute collection paginée.
          */
@@ -346,6 +764,136 @@ export interface components {
             total: number;
         };
         /**
+         * PredictionPointOut
+         * @description Point prédit, tel qu'il a été archivé.
+         */
+        PredictionPointOut: {
+            /**
+             * Generated At
+             * Format: date-time
+             * @description Horodatage de production de la prévision par le service d'inférence, ISO 8601 UTC. Distinct de l'horodatage cible.
+             */
+            generated_at: string;
+            /**
+             * Lower Bound Kw
+             * @description Borne basse de l'intervalle de confiance, nulle si non calculée.
+             */
+            lower_bound_kw: number | null;
+            /**
+             * Model Version
+             * @description Version du modèle ayant produit ce point.
+             */
+            model_version: string;
+            /**
+             * Predicted Consumption Kw
+             * @description Puissance prédite en kilowatts.
+             */
+            predicted_consumption_kw: number;
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description Horodatage cible de la prévision, ISO 8601 UTC.
+             */
+            timestamp: string;
+            /**
+             * Upper Bound Kw
+             * @description Borne haute de l'intervalle de confiance, nulle si non calculée.
+             */
+            upper_bound_kw: number | null;
+        };
+        /**
+         * PredictionsPage
+         * @description Page de prédictions accompagnée de ses métadonnées.
+         */
+        PredictionsPage: {
+            /**
+             * Items
+             * @description Prédictions de la page, triées par horodatage cible croissant.
+             */
+            items: components["schemas"]["PredictionPointOut"][];
+            /** @description Métadonnées de pagination de la requête. */
+            meta: components["schemas"]["PaginationMeta"];
+        };
+        /**
+         * QualityIndicatorOut
+         * @description Part de mesures dégradées d'un site sur la fenêtre.
+         *
+         *     « Dégradée » est la définition de l'ETL, pas une seconde définition écrite
+         *     ici : une mesure est dégradée quand la source ou l'ETL l'a qualifiée
+         *     `degraded` ou `critical`, quand sa valeur a dû être reconstruite, ou quand
+         *     ses motifs d'absence nomment une panne capteur. L'API compte, elle ne juge
+         *     pas.
+         *
+         *     Une mesure écartée par un analyste (`mesure_exclu`) n'entre PAS dans ce
+         *     compte : l'exclusion est un jugement humain sur une valeur aberrante, la
+         *     dégradation est un fait capteur. Les confondre rendrait le chiffre
+         *     indéfendable en recette.
+         */
+        QualityIndicatorOut: {
+            /**
+             * Degraded
+             * @description Mesures dégradées au sens de l'ETL, voir la description du modèle.
+             */
+            degraded: number;
+            /**
+             * Degraded Ratio
+             * @description Part de mesures dégradées, entre 0 et 1. Vaut 0 sur une fenêtre vide, que qualified_ratio permet alors de distinguer d'une fenêtre saine.
+             */
+            degraded_ratio: number;
+            /**
+             * Exceeds Threshold
+             * @description Vrai quand degraded_ratio atteint le seuil.
+             */
+            exceeds_threshold: boolean;
+            /**
+             * Imputed
+             * @description Mesures dont la valeur a été reconstruite par l'ETL.
+             */
+            imputed: number;
+            /**
+             * Not Good
+             * @description Mesures dont data_quality n'est pas good.
+             */
+            not_good: number;
+            /**
+             * Qualified
+             * @description Mesures dont la qualification a été posée par l'ETL et non laissée au défaut de la base.
+             */
+            qualified: number;
+            /**
+             * Qualified Ratio
+             * @description Part de la fenêtre réellement qualifiée, entre 0 et 1. Le chiffre le plus important du bloc : data_quality vaut good par défaut, et une fenêtre non encore traitée par l'ETL affiche donc 0 % de dégradation sans que cela veuille dire qu'elle est saine.
+             */
+            qualified_ratio: number;
+            /**
+             * Sensor Failure
+             * @description Mesures dont les motifs d'absence nomment une panne capteur, dans le vocabulaire de la source (*_sensor_failure) comme dans celui de l'ETL (*:undeclared).
+             */
+            sensor_failure: number;
+            /**
+             * Threshold
+             * @description Part au-delà de laquelle la fiabilité du site est tenue pour compromise, servie ici pour que le dashboard ne la redéclare pas.
+             */
+            threshold: number;
+            /**
+             * Total
+             * @description Mesures du site sur la fenêtre.
+             */
+            total: number;
+            /**
+             * Window End
+             * Format: date-time
+             * @description Borne supérieure incluse de la fenêtre, ISO 8601 UTC.
+             */
+            window_end: string;
+            /**
+             * Window Start
+             * Format: date-time
+             * @description Borne inférieure incluse de la fenêtre, ISO 8601 UTC.
+             */
+            window_start: string;
+        };
+        /**
          * ReadingsPage
          * @description Page de mesures énergétiques accompagnée de ses métadonnées.
          */
@@ -357,6 +905,210 @@ export interface components {
             items: components["schemas"]["EnergyReadingOut"][];
             /** @description Métadonnées de pagination de la requête. */
             meta: components["schemas"]["PaginationMeta"];
+        };
+        /**
+         * RecommendationOut
+         * @description Action proposée sur un site, à partir de sa prévision.
+         *
+         *     `message` est prêt à afficher, mais les champs structurés à côté de lui ne
+         *     sont pas décoratifs : un dashboard qui devrait extraire une heure d'une
+         *     phrase française serait cassé par la première reformulation.
+         */
+        RecommendationOut: {
+            /**
+             * At
+             * @description Instant précis visé, ISO 8601 UTC. Renseigné quand l'action porte sur un point et non sur une plage — un délestage, par exemple.
+             */
+            at?: string | null;
+            /**
+             * Message
+             * @description Formulation prête à afficher.
+             */
+            message: string;
+            /**
+             * Severity
+             * @description Urgence de l'action, sur l'échelle des alertes.
+             * @enum {string}
+             */
+            severity: "low" | "medium" | "high" | "critical";
+            /**
+             * Type
+             * @description Nature de l'action proposée.
+             * @enum {string}
+             */
+            type: "predicted_peak" | "capacity_overrun" | "sensor_failure";
+            /**
+             * Value Kw
+             * @description Grandeur en kilowatts attachée à l'action : puissance à délester, ou pointe prévue selon la nature.
+             */
+            value_kw?: number | null;
+            /**
+             * Window End
+             * @description Fin de la fenêtre concernée, ISO 8601 UTC.
+             */
+            window_end?: string | null;
+            /**
+             * Window Start
+             * @description Début de la fenêtre concernée, ISO 8601 UTC. Nul pour une recommandation qui ne porte pas sur une plage.
+             */
+            window_start?: string | null;
+        };
+        /**
+         * RecommendationsOut
+         * @description Recommandations d'un site, et de quoi elles ont été tirées.
+         *
+         *     `detail` porte la raison d'une liste vide, et ce n'est pas un luxe : « rien
+         *     à signaler » et « aucune prévision disponible » se ressemblent au point
+         *     d'être confondus, alors que le premier rassure et le second doit inquiéter.
+         */
+        RecommendationsOut: {
+            /**
+             * Detail
+             * @description Raison d'une liste vide, nulle quand des actions sont servies.
+             */
+            detail?: string | null;
+            /**
+             * Generated At
+             * Format: date-time
+             * @description Horodatage du calcul, ISO 8601 UTC. Rien n'est archivé.
+             */
+            generated_at: string;
+            /**
+             * Horizon Hours
+             * @description Profondeur de la fenêtre de prévision examinée, en heures.
+             */
+            horizon_hours: number;
+            /**
+             * Items
+             * @description Actions proposées, de la plus urgente à la moins urgente.
+             */
+            items: components["schemas"]["RecommendationOut"][];
+            /**
+             * Model Version
+             * @description Version du modèle ayant produit les prévisions examinées. Nulle quand aucune prévision n'a été trouvée. Un conseil ne vaut que ce que vaut le modèle qui le fonde.
+             */
+            model_version?: string | null;
+            /**
+             * Site Id
+             * @description Site pour lequel les actions sont proposées.
+             */
+            site_id: string;
+        };
+        /**
+         * SensorFailureOut
+         * @description Épisode de panne d'un capteur, borné par son début et sa fin.
+         *
+         *     `started_at` est l'instant où le collecteur a CONSTATÉ la panne, pas celui
+         *     où elle a commencé : la source dit `failing` au présent, jamais depuis
+         *     quand. Un collecteur arrêté décale donc ce début, et le confondre avec le
+         *     début réel ferait passer une interruption de collecte pour un capteur sain.
+         */
+        SensorFailureOut: {
+            /**
+             * Capteur
+             * @description Capteur tombé en panne.
+             * @enum {string}
+             */
+            capteur: "consumption" | "electrical" | "temperature" | "humidity" | "network";
+            /**
+             * Ended At
+             * @description Constat du rétablissement, nul tant que la panne dure.
+             */
+            ended_at?: string | null;
+            /**
+             * Failing Until
+             * @description Dernière date de rétablissement annoncée par la source pendant l'épisode. Une prévision, pas un constat : elle peut être dépassée alors que la panne dure encore.
+             */
+            failing_until?: string | null;
+            /**
+             * Ongoing
+             * @description Vrai tant que le collecteur n'a pas constaté le retour à ok.
+             */
+            ongoing: boolean;
+            /**
+             * Site Id
+             * @description Identifiant du site concerné.
+             */
+            site_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             * @description Constat de la panne par le collecteur, ISO 8601 UTC.
+             */
+            started_at: string;
+        };
+        /**
+         * SensorHealthOut
+         * @description État d'un capteur d'un site, tel que la source le déclare.
+         *
+         *     Complète `null_reasons` sans le remplacer : celui-ci dit ce qui manquait à
+         *     une mesure, celui-là dit quel capteur est en cause et jusqu'à quand la
+         *     source annonce qu'il le restera. Un capteur qui tombe entre deux mesures
+         *     n'apparaît que dans le second.
+         */
+        SensorHealthOut: {
+            /**
+             * Capteur
+             * @description Capteur décrit.
+             * @enum {string}
+             */
+            capteur: "consumption" | "electrical" | "temperature" | "humidity" | "network";
+            /**
+             * Failing Until
+             * @description Date de rétablissement annoncée par la source, nulle quand le capteur fonctionne.
+             */
+            failing_until?: string | null;
+            /**
+             * Overall
+             * @description Synthèse du site : ok si tous les capteurs répondent, degraded si l'un d'eux est tombé, critical en cas de perte réseau.
+             * @enum {string}
+             */
+            overall: "ok" | "degraded" | "critical";
+            /**
+             * Releve Le
+             * Format: date-time
+             * @description Dernier passage du collecteur sur cet état, ISO 8601 UTC. Un état ancien dit que la collecte s'est tue, pas que le capteur va bien.
+             */
+            releve_le: string;
+            /**
+             * Site Id
+             * @description Identifiant du site concerné.
+             */
+            site_id: string;
+            /**
+             * Statut
+             * @description État du capteur : ok ou failing.
+             * @enum {string}
+             */
+            statut: "ok" | "failing";
+        };
+        /**
+         * SiteIndicatorsOut
+         * @description Les trois indicateurs de confiance d'un site, à un instant donné.
+         */
+        SiteIndicatorsOut: {
+            /** @description Écart entre prévisions servies et consommation réelle. */
+            accuracy: components["schemas"]["AccuracyIndicatorOut"];
+            /**
+             * Generated At
+             * Format: date-time
+             * @description Horodatage du calcul, ISO 8601 UTC. C'est lui qui sert de présent aux âges publiés.
+             */
+            generated_at: string;
+            /** @description Fraîcheur de la dernière ingestion. */
+            ingestion: components["schemas"]["IngestionIndicatorOut"];
+            /** @description Part de mesures dégradées sur la fenêtre. */
+            quality: components["schemas"]["QualityIndicatorOut"];
+            /**
+             * Site Id
+             * @description Identifiant du site décrit.
+             */
+            site_id: string;
+            /**
+             * Window Hours
+             * @description Profondeur de la fenêtre sur laquelle les parts sont calculées.
+             */
+            window_hours: number;
         };
         /**
          * SiteOut
@@ -393,6 +1145,93 @@ export interface components {
              * @description État d'exploitation du site remonté par la source.
              */
             status: string;
+        };
+        /**
+         * SiteSyncOut
+         * @description Résultat d'une synchronisation du référentiel depuis la source.
+         *
+         *     `synchronized` compte les lignes écrites, pas les sites servis : une
+         *     source qui décrit incomplètement un site le voit écarté, et l'écart entre
+         *     les deux nombres est ce qui le signale.
+         */
+        SiteSyncOut: {
+            /**
+             * Received
+             * @description Nombre de sites servis par la source.
+             */
+            received: number;
+            /**
+             * Sites
+             * @description Référentiel complet après synchronisation, trié par identifiant.
+             */
+            sites: components["schemas"]["SiteOut"][];
+            /**
+             * Synchronized
+             * @description Nombre de sites écrits en base.
+             */
+            synchronized: number;
+        };
+        /**
+         * SpikeSimulationOut
+         * @description Pic de consommation déclenché sur la source, et ce qu'il a donné.
+         *
+         *     `consumption_kw_constatee` est la valeur relue juste après le
+         *     déclenchement. Elle est nulle quand la source a accepté le pic puis s'est
+         *     tue : le pic a quand même eu lieu, et le dire en échec inviterait à
+         *     rejouer l'appel, donc à superposer deux pics.
+         */
+        SpikeSimulationOut: {
+            /**
+             * Consumption Kw Constatee
+             * @description Puissance relue juste après le pic, nulle si la source s'est tue.
+             */
+            consumption_kw_constatee?: number | null;
+            /**
+             * Data Quality Constatee
+             * @description Qualification de la mesure relue, nulle si la source s'est tue.
+             */
+            data_quality_constatee?: ("good" | "partial" | "degraded" | "critical") | null;
+            /**
+             * Declenche Le
+             * Format: date-time
+             * @description Horodatage du déclenchement, ISO 8601 UTC.
+             */
+            declenche_le: string;
+            /**
+             * Declenche Par
+             * @description Utilisateur ayant déclenché le pic, nul si l'authentification est désactivée.
+             */
+            declenche_par?: string | null;
+            /**
+             * Duration Minutes
+             * @description Durée demandée du pic, en minutes.
+             */
+            duration_minutes: number;
+            /**
+             * Evenement
+             * @description Nature de l'événement déclenché, consumption_spike.
+             */
+            evenement: string;
+            /**
+             * Message
+             * @description Message rendu par la source, lisible tel quel.
+             */
+            message?: string | null;
+            /**
+             * Simulation Id
+             * @description Identifiant de la simulation archivée.
+             */
+            simulation_id: number;
+            /**
+             * Site Id
+             * @description Site sur lequel le pic a été déclenché.
+             */
+            site_id: string;
+            /**
+             * Statut
+             * @description Statut rendu par la source, simulated en cas de succès.
+             */
+            statut: string;
         };
         /**
          * TokenResponse
@@ -449,6 +1288,14 @@ export interface operations {
                 site_id?: string | null;
                 /** @description Restreindre aux alertes de cette gravité. */
                 severity?: ("low" | "medium" | "high" | "critical") | null;
+                /** @description Restreindre aux alertes de cette nature. */
+                type?: ("spike" | "threshold" | "anomaly" | "outage" | "sensor") | null;
+                /** @description Borne inférieure incluse du déclenchement, ISO 8601. */
+                start_time?: string | null;
+                /** @description Borne supérieure incluse du déclenchement, ISO 8601. */
+                end_time?: string | null;
+                /** @description Taille de page. */
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -547,6 +1394,244 @@ export interface operations {
             };
         };
     };
+    list_indicators_api_v1_indicators_get: {
+        parameters: {
+            query?: {
+                /** @description Profondeur de la fenêtre en heures, entre 1 et 168 (défaut 24). */
+                window_hours?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteIndicatorsOut"][];
+                };
+            };
+            /** @description Jeton JWT absent, expiré ou invalide. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Paramètres de requête invalides. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_models_api_v1_models_get: {
+        parameters: {
+            query?: {
+                /** @description Restreindre aux versions de ce modèle. */
+                nom?: string | null;
+                /** @description Vrai pour les seules versions promues. */
+                actif?: boolean | null;
+                /** @description Nombre maximal de modèles rendus. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelOut"][];
+                };
+            };
+            /** @description Jeton JWT absent, expiré ou invalide. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Paramètres de requête invalides. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_current_model_api_v1_models_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelOut"];
+                };
+            };
+            /** @description Jeton JWT absent, expiré ou invalide. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Aucun modèle n'est promu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_spikes_api_v1_simulations_spike_get: {
+        parameters: {
+            query?: {
+                /** @description Restreindre aux pics de ce site. */
+                site_id?: string | null;
+                /** @description Nombre maximal de pics rendus. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpikeSimulationOut"][];
+                };
+            };
+            /** @description Jeton JWT absent, expiré ou invalide. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Paramètres de requête invalides. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    trigger_spike_api_v1_simulations_spike__site_id__post: {
+        parameters: {
+            query?: {
+                /** @description Durée du pic simulé, en minutes. */
+                duration_minutes?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Identifiant du site cible. */
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpikeSimulationOut"];
+                };
+            };
+            /** @description Jeton JWT absent, expiré ou invalide. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Rôle writer requis pour cette opération. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Site inconnu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Paramètres de requête invalides. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Le service d'inférence ou la source n'a pas répondu. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_sites_api_v1_sites_get: {
         parameters: {
             query?: never;
@@ -576,6 +1661,53 @@ export interface operations {
             };
         };
     };
+    sync_sites_api_v1_sites_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteSyncOut"];
+                };
+            };
+            /** @description Jeton JWT absent, expiré ou invalide. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Rôle writer requis pour cette opération. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Le service d'inférence ou la source n'a pas répondu. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_site_api_v1_sites__site_id__get: {
         parameters: {
             query?: never;
@@ -595,6 +1727,118 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SiteOut"];
+                };
+            };
+            /** @description Jeton JWT absent, expiré ou invalide. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Site inconnu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Paramètres de requête invalides. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_site_indicators_api_v1_sites__site_id__indicators_get: {
+        parameters: {
+            query?: {
+                /** @description Profondeur de la fenêtre en heures, entre 1 et 168 (défaut 24). */
+                window_hours?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Identifiant du site. */
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteIndicatorsOut"];
+                };
+            };
+            /** @description Jeton JWT absent, expiré ou invalide. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Site inconnu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Paramètres de requête invalides. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_predictions_api_v1_sites__site_id__predictions_get: {
+        parameters: {
+            query: {
+                /** @description Borne inférieure incluse de la fenêtre, ISO 8601 UTC. */
+                start_time: string;
+                /** @description Borne supérieure incluse de la fenêtre, ISO 8601 UTC. */
+                end_time: string;
+                /** @description Taille de page, entre 1 et 1000. */
+                limit?: number;
+                /** @description Décalage appliqué au début de la collection. */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Identifiant du site. */
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PredictionsPage"];
                 };
             };
             /** @description Jeton JWT absent, expiré ou invalide. */
@@ -704,6 +1948,166 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EnergyReadingOut"];
+                };
+            };
+            /** @description Jeton JWT absent, expiré ou invalide. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Site inconnu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Paramètres de requête invalides. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_recommendations_api_v1_sites__site_id__recommendations_get: {
+        parameters: {
+            query?: {
+                /** @description Profondeur de la fenêtre de prévision examinée. */
+                horizon_hours?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Identifiant du site. */
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationsOut"];
+                };
+            };
+            /** @description Jeton JWT absent, expiré ou invalide. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Site inconnu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Paramètres de requête invalides. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_sensors_api_v1_sites__site_id__sensors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du site. */
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensorHealthOut"][];
+                };
+            };
+            /** @description Jeton JWT absent, expiré ou invalide. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Site inconnu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Paramètres de requête invalides. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_sensor_failures_api_v1_sites__site_id__sensors_history_get: {
+        parameters: {
+            query?: {
+                /** @description Restreindre aux pannes de ce capteur. */
+                capteur?: string | null;
+                /** @description Vrai pour les seules pannes en cours, faux pour les closes. */
+                ongoing?: boolean | null;
+                /** @description Nombre maximal d'épisodes rendus. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Identifiant du site. */
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensorFailureOut"][];
                 };
             };
             /** @description Jeton JWT absent, expiré ou invalide. */

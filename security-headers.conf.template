@@ -1,0 +1,82 @@
+# En-têtes de sécurité, partagés par `include` entre le bloc server et chaque
+# location qui redéfinit ses propres add_header dans nginx.conf.
+#
+# CE FICHIER EST UN MODÈLE. L'entrée de l'image Nginx le passe à envsubst au
+# démarrage du conteneur (/docker-entrypoint.d/20-envsubst-on-templates.sh) et
+# écrit le résultat dans /etc/nginx/security-headers.conf, que nginx.conf
+# inclut. La seule variable substituée est ${CSP_CONNECT_SRC}, ci-dessous.
+#
+# Nginx ne fait *jamais* hériter les add_header d'un bloc server dans un bloc
+# location qui en pose au moins un des siens — c'est le comportement documenté
+# de la directive, pas un bug. Avant ce fichier, `/assets/` ne réaffirmait que
+# X-Content-Type-Options : tout le reste tombait silencieusement sur chaque
+# script et chaque feuille de style servis par le dashboard. Dupliquer les
+# huit lignes à la main s'est déjà déphasé une fois ; un `include` ne peut pas
+# se déphaser.
+#
+# `always` : sans ce mot-clé, Nginx n'ajoute l'en-tête qu'aux réponses 2xx/3xx,
+# et une page d'erreur repartirait sans protection.
+
+# La politique de sécurité de contenu est la vraie parade au vol du jeton :
+# celui-ci vit dans sessionStorage, donc lisible par un script injecté. La CSP
+# empêche ce script d'être chargé.
+#
+#   script-src 'self'         : le bundle Vite ne contient aucun script
+#                               inline, aucune exception n'est nécessaire.
+#   style-src 'unsafe-inline' : concession assumée. React et Recharts posent
+#                               des attributs style sur les éléments, que la
+#                               CSP bloquerait sinon.
+#   connect-src               : 'self' NE SUFFIT PAS. Traefik route le
+#                               dashboard et l'API sur deux hôtes distincts
+#                               (app.enervision.com et api.enervision.com,
+#                               règles `Host(...)` du rôle Ansible
+#                               applications) : ce sont deux origines, et un
+#                               connect-src limité à 'self' bloque donc tous
+#                               les appels. Les origines autorisées viennent
+#                               de CSP_CONNECT_SRC, décidée au déploiement —
+#                               l'image est construite une fois par commit et
+#                               déployée telle quelle sur des environnements
+#                               dont les domaines diffèrent, la liste ne peut
+#                               donc pas être figée au build.
+#
+#                               Valeur attendue : les origines exactes,
+#                               séparées par des espaces, schéma compris, sans
+#                               chemin ni joker. Par exemple :
+#                                 CSP_CONNECT_SRC="https://api.enervision.com \
+#                                                  https://predict.enervision.com"
+#
+#                               Non renseignée, elle vaut la chaîne vide (voir
+#                               le ENV du Dockerfile) : on retombe alors sur
+#                               'self' seul. C'est un défaut qui échoue en se
+#                               fermant — un dashboard qui n'appelle rien plutôt
+#                               qu'une CSP ouverte à tout vent.
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ${CSP_CONNECT_SRC}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'" always;
+
+# Interdit au navigateur de deviner un type MIME : un fichier téléversé qui
+# serait servi en text/plain ne peut pas être exécuté comme du script.
+add_header X-Content-Type-Options "nosniff" always;
+
+# Le dashboard n'a aucune raison d'être encadré. Double emploi voulu avec
+# frame-ancestors, pour les navigateurs qui ignorent encore la directive.
+add_header X-Frame-Options "DENY" always;
+
+# L'URL complète ne fuit pas vers un tiers ; l'origine seule suffit.
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+# Aucune de ces interfaces n'est utilisée par le dashboard.
+add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=()" always;
+
+# Isolation d'origine croisée (relevée par le scan OWASP ZAP de la CI, 90004 —
+# la même règle couvre les trois en-têtes ensemble et signale celui qui manque
+# encore). `credentialless` plutôt que `require-corp` pour l'embedder : ce
+# dernier exigerait un en-tête CORP explicite sur chaque sous-ressource, y
+# compris celles qu'on ne maîtrise pas ; en credentialless, une ressource
+# cross-origin sans CORP est simplement chargée sans identifiants plutôt que
+# bloquée.
+#
+# Ces trois en-têtes ne gênent pas les appels à l'API : ils portent sur les
+# sous-ressources chargées par le document (script, img, iframe...), pas sur
+# les requêtes fetch/XHR, qui relèvent de connect-src et du CORS de l'API.
+add_header Cross-Origin-Opener-Policy "same-origin" always;
+add_header Cross-Origin-Embedder-Policy "credentialless" always;
+add_header Cross-Origin-Resource-Policy "same-origin" always;
