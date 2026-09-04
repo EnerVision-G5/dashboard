@@ -8,7 +8,9 @@ import {
   makePrediction,
   makePredictionPoint,
   makeReading,
+  makeSensorHealth,
   makeSite,
+  makeSiteIndicators,
 } from "../test/doubles";
 
 vi.mock("recharts", async (importOriginal) => {
@@ -20,6 +22,8 @@ const fetchSites = vi.hoisted(() => vi.fn());
 const fetchReadings = vi.hoisted(() => vi.fn());
 const fetchLatestReading = vi.hoisted(() => vi.fn());
 const fetchPredictions = vi.hoisted(() => vi.fn());
+const fetchIndicators = vi.hoisted(() => vi.fn());
+const fetchSensors = vi.hoisted(() => vi.fn());
 
 vi.mock("../api/sites", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/sites")>()),
@@ -33,6 +37,18 @@ vi.mock("../api/readings", async (importOriginal) => ({
 vi.mock("../api/predictions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/predictions")>()),
   fetchPredictions,
+}));
+// Le bandeau d'EV-18 interroge l'API dès que la page est montée : sans ces
+// deux doubles, chaque test attendrait un appel réseau réel et le bandeau
+// afficherait une erreur, au risque de deux « alert » là où les tests d'erreur
+// n'en attendent qu'un.
+vi.mock("../api/indicators", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/indicators")>()),
+  fetchIndicators,
+}));
+vi.mock("../api/sensors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/sensors")>()),
+  fetchSensors,
 }));
 
 const SITE_A = makeSite({ site_id: "SITE-001", site_name: "Usine Nantes Nord", status: "active" });
@@ -95,6 +111,11 @@ beforeEach(() => {
       ],
     }),
   );
+  fetchIndicators.mockResolvedValue([
+    makeSiteIndicators({ site_id: "SITE-001" }),
+    makeSiteIndicators({ site_id: "SITE-002" }),
+  ]);
+  fetchSensors.mockResolvedValue([makeSensorHealth()]);
 });
 
 afterEach(() => {
@@ -335,5 +356,66 @@ describe("SiteDashboardPage · mise en page de la maquette", () => {
     renderPage(null);
 
     expect(screen.queryByRole("button", { name: "Se déconnecter" })).toBeNull();
+  });
+});
+
+describe("SiteDashboardPage · bandeau de fraîcheur et de qualité (EV-18)", () => {
+  it("qualifie les données du parc au-dessus des panneaux", async () => {
+    renderPage();
+
+    // La région porte le même nom pendant la vérification et après : on
+    // attend donc son verdict, pas son apparition.
+    expect(await screen.findByText(/Données à jour/)).toBeDefined();
+    const banner = screen.getByRole("region", {
+      name: "Fraîcheur et qualité des données",
+    });
+    expect(banner.textContent).toContain("2 site(s) examiné(s)");
+    expect(fetchIndicators).toHaveBeenCalled();
+    expect(fetchSensors).toHaveBeenCalledWith(
+      expect.anything(),
+      "SITE-001",
+      expect.anything(),
+    );
+  });
+
+  it("alerte sur un site muet sans effacer les mesures du site affiché", async () => {
+    fetchIndicators.mockResolvedValue([
+      makeSiteIndicators({ site_id: "SITE-001" }),
+      makeSiteIndicators({
+        site_id: "SITE-002",
+        ingestion: {
+          last_measure_at: null,
+          last_ingested_at: null,
+          measure_age_seconds: null,
+          ingestion_lag_seconds: null,
+          is_stale: true,
+          stale_threshold_seconds: 300,
+          collector: null,
+        },
+      }),
+    ]);
+
+    renderPage();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Données inexploitables sur au moins un site");
+    // Le site est nommé par son libellé, pas par son identifiant technique.
+    expect(screen.getByText(/Entrepôt Rezé n'a aucune mesure/)).toBeDefined();
+    expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
+  });
+
+  it("suit le site choisi pour l'état des capteurs", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+
+    fireEvent.change(screen.getByLabelText("Site"), { target: { value: "SITE-002" } });
+
+    await waitFor(() => {
+      expect(fetchSensors).toHaveBeenLastCalledWith(
+        expect.anything(),
+        "SITE-002",
+        expect.anything(),
+      );
+    });
   });
 });
