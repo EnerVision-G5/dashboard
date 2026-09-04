@@ -11,7 +11,8 @@ et sa **prédiction** sur les 24 heures suivantes.
 **EV-48** y ajoute l'authentification : une page de connexion garde l'entrée, le
 jeton obtenu signe tous les appels, et le dashboard est mis en page d'après la
 maquette « Smart Energy Optimiser » — consommation temps réel, recommandations,
-indicateurs.
+indicateurs. **EV-50** réunit les écrans authentifiés derrière une barre de
+navigation commune, voir [Navigation](#navigation).
 
 **EV-18** y ajoute un bandeau qui qualifie les données affichées — fraîcheur de
 l'ingestion, part de mesures dégradées, état des capteurs — pour qu'aucune
@@ -199,17 +200,49 @@ aucun endpoint de profil. La signature n'est pas vérifiée côté navigateur et
 peut pas l'être : la clé HS256 est le secret de l'API. Ce décodage sert à
 l'affichage et à l'échéance, jamais à autoriser quoi que ce soit.
 
+## Navigation
+
+**EV-50** pose une barre de navigation commune à tous les écrans authentifiés.
+Elle porte l'identité du produit, les destinations, l'utilisateur connecté et la
+déconnexion — un seul endroit, pour qu'un second écran n'apporte pas une
+deuxième barre.
+
+| Destination | Adresse | État |
+| --- | --- | --- |
+| Dashboard | `/` | Servie |
+| Configuration | `/config` | Coquille, contenu attendu par EV-55 |
+
+La page affichée est signalée de trois façons : par le poids du texte, par un
+fond, et par `aria-current="page"` — le seul repère qu'un lecteur d'écran
+puisse annoncer. La couleur ne porte jamais seule cette information, le design
+system l'interdit.
+
+Le lien vers le dashboard exige une correspondance **exacte** (`end`) : servi
+sur `/`, préfixe de toute autre adresse, il resterait sinon actif sur la page
+de configuration.
+
+La garde de session et la barre sont portées par une route parente,
+`AuthenticatedLayout` : un écran ajouté sous elle hérite des deux sans rien
+déclarer, et ne peut donc pas être oublié hors authentification. Le
+durcissement complet, rôles compris, reste le périmètre d'**EV-49**.
+
+La page `/config` est servie dès maintenant, mais **n'affiche aucun
+paramètre**. Un lien de navigation qui retomberait sur la règle `*` ramènerait
+au dashboard sans rien dire, ce qui se lit comme une panne ; à l'inverse, un
+formulaire posé là aujourd'hui promettrait une persistance que le contrat gelé
+1.1.0 ne publie pas. L'écran dit donc ce qu'il en est et renvoie à **EV-55**.
+
 ## Écran de supervision
 
-La mise en page suit la maquette « Smart Energy Optimiser » : un en-tête portant
-le titre, le sélecteur de site et — à droite — la puissance souscrite et la
-localisation du site choisi, puis trois zones.
+La mise en page suit la maquette « Smart Energy Optimiser » : sous la barre de
+navigation, un en-tête portant le sélecteur de site et — à droite — la puissance
+souscrite et la localisation du site choisi, puis trois zones.
 
 | Zone | Source | État |
 | --- | --- | --- |
 | Fraîcheur et qualité | `GET /indicators` et `GET /sites/{id}/sensors`, rafraîchis toutes les 60 s | Servie |
 | Consommation temps réel | `GET /sites/{id}/readings/latest`, rafraîchi toutes les 30 s | Servie |
-| Recommandations | aucune | Vide, voir ci-dessous |
+| Recommandations | `GET /sites/{id}/recommendations`, servie mais pas encore branchée | Vide, voir ci-dessous |
 | Indicateurs | graphique consommation / prédiction d'EV-16 | Servi |
 
 ### Bandeau de fraîcheur et de qualité des données
@@ -282,13 +315,12 @@ lui, tient le sien de l'API. Les aligner — c'est-à-dire faire lire à ce pann
 le `stale_threshold_seconds` du contrat — relève d'**EV-52**, qui reprend le
 panneau temps réel.
 
-**Recommandations** tient sa place dans la mise en page sans rien afficher : le
-contrat gelé 1.0.0 ne publie aucune route de recommandations. Celle qui est
-pressentie, `GET /sites/{id}/recommendations`, relève du contrat 1.2.0 et du
-ticket **EV-32**, et le guide d'intégration demande de ne pas l'anticiper tant
-que la PR de contrat n'est pas fusionnée. Trois recommandations d'exemple
-auraient rempli la maquette, mais des conseils inventés sur une facture
-d'électricité seraient lus comme de vrais conseils.
+**Recommandations** tient sa place dans la mise en page sans rien afficher, et
+c'est désormais un retard et non une impossibilité : le contrat **1.5.0**
+publie `GET /sites/{id}/recommendations`, servi par l'API. Le brancher relève
+d'**EV-54**. La zone reste donc vide en attendant, plutôt que remplie de
+conseils inventés : sur une facture d'électricité, ils seraient lus comme de
+vrais conseils.
 
 ## Flux de données
 

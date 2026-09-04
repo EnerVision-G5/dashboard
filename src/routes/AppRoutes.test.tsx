@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { AppRoutes } from "./AppRoutes";
-import { DASHBOARD_PATH, LOGIN_PATH } from "./paths";
+import { CONFIG_PATH, DASHBOARD_PATH, LOGIN_PATH } from "./paths";
 import { AuthProvider } from "../auth/AuthProvider";
 import { closeSession } from "../auth/session";
 
@@ -43,7 +43,6 @@ function renderAt(path: string) {
 }
 
 async function signIn() {
-  const { fireEvent } = await import("@testing-library/react");
   fireEvent.change(screen.getByLabelText("Identifiant"), {
     target: { value: "dev.reader" },
   });
@@ -121,6 +120,15 @@ describe("AppRoutes", () => {
     });
   });
 
+  it("n'affiche pas la navigation principale sur l'écran de connexion", async () => {
+    renderAt(DASHBOARD_PATH);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Se connecter" })).toBeDefined();
+    });
+    expect(screen.queryByRole("navigation", { name: "Navigation principale" })).toBeNull();
+  });
+
   it("n'affiche pas le formulaire à un utilisateur déjà connecté", async () => {
     renderAt(LOGIN_PATH);
     await signIn();
@@ -128,6 +136,48 @@ describe("AppRoutes", () => {
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "Se connecter" })).toBeNull();
     });
+  });
+});
+
+describe("navigation principale (EV-50)", () => {
+  it("affiche la barre de navigation sur les écrans authentifiés", async () => {
+    renderAt(LOGIN_PATH);
+    await signIn();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Site")).toBeDefined();
+    });
+    expect(screen.getByRole("navigation", { name: "Navigation principale" })).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Smart Energy Optimiser", level: 1 })).toBeDefined();
+  });
+
+  it("mène du dashboard à la configuration sans repasser par la connexion", async () => {
+    renderAt(LOGIN_PATH);
+    await signIn();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Site")).toBeDefined();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("link", { name: "Configuration" }));
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Configuration", level: 2 }),
+    ).toBeDefined();
+    // La barre survit au changement d'écran : elle appartient au layout, pas
+    // aux pages.
+    expect(screen.getByRole("navigation", { name: "Navigation principale" })).toBeDefined();
+    expect(screen.queryByLabelText("Site")).toBeNull();
+  });
+
+  it("renvoie un visiteur anonyme de la configuration vers la connexion", async () => {
+    renderAt(CONFIG_PATH);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Se connecter" })).toBeDefined();
+    });
+    expect(screen.queryByRole("heading", { name: "Configuration" })).toBeNull();
   });
 });
 
