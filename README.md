@@ -263,6 +263,8 @@ indicateurs, mais **le seuil qui qualifie chacun d'eux** —
 `overall` des capteurs. Le dashboard les relit ; **il ne choisit aucun seuil**,
 sans quoi un seuil révisé côté exploitation devrait être suivi à deux endroits.
 
+![Les trois niveaux du bandeau, et le cas des deux flux tombés](docs/images/app-bandeau-qualite.png)
+
 Trois niveaux, dans le vocabulaire du contrat :
 
 | Niveau | Ce qui le déclenche | Traitement |
