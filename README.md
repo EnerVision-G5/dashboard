@@ -89,6 +89,37 @@ Aucune de ces valeurs n'est un secret : ce sont des adresses de service. Le
 jeton, lui, n'est jamais configuré — il est obtenu à la connexion et vit en
 mémoire, voir [Authentification](#authentification).
 
+### En image : la configuration est lue au démarrage
+
+Vite fige les variables `VITE_*` dans le bundle **au build**. L'image est
+pourtant construite une seule fois par commit, épinglée par SHA, puis déployée
+telle quelle sur des environnements dont les domaines diffèrent : les figer au
+build imposerait une image par environnement.
+
+Le conteneur lit donc sa configuration à son démarrage, comme le font déjà
+`api` et `predict` :
+
+| Variable du conteneur | Remplace |
+| --- | --- |
+| `API_BASE_URL` | `VITE_API_BASE_URL` |
+| `PREDICTION_SOURCE` | `VITE_PREDICTION_SOURCE` |
+| `CSP_CONNECT_SRC` | — (origines de la CSP, voir [Sécurité](#sécurité)) |
+
+```
+config.js.template ──envsubst au démarrage──> /etc/nginx/config.js
+                                                      │
+index.html : <script src="/config.js">  ◄─────────────┘  servi par Nginx
+src/config/env.ts : window.__ENERVISION_CONFIG__ ?? import.meta.env
+```
+
+L'ordre compte : en image la configuration injectée l'emporte ; en
+développement elle n'existe pas et le `.env` reprend la main sans qu'on ait à
+le dire. Une adresse absente des deux côtés donne une erreur de configuration
+nommant la variable, jamais un appel vers un hôte deviné.
+
+`/config.js` est servi en `no-cache` et **ne doit jamais porter de secret** :
+il part en clair à quiconque ouvre la page.
+
 Une base absente n'est pas remplacée par une valeur devinée : l'écran affiche
 une erreur de configuration nommant la variable manquante.
 
