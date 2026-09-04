@@ -280,6 +280,7 @@ souscrite et la localisation du site choisi, puis trois zones.
 | Consommation temps réel | `GET /sites/{id}/readings/latest`, rafraîchi toutes les 30 s | Servie |
 | Recommandations | `GET /sites/{id}/recommendations`, servie mais pas encore branchée | Vide, voir ci-dessous |
 | Indicateurs | graphique consommation / prédiction d'EV-16 | Servi |
+| Diagnostics du site | `GET /sites/{id}/indicators` et `GET /sites/{id}/sensors/history`, rafraîchis toutes les 60 s | Servis |
 
 ### Bandeau de fraîcheur et de qualité des données
 
@@ -347,11 +348,15 @@ l'intensité, la température et l'humidité — toutes issues de la même
 `EnergyReadingOut`. Une valeur `null` y est affichée comme absente (`—`), jamais
 comme un zéro, et la valeur imputée par l'ETL n'est jamais substituée au relevé :
 elle est mentionnée pour ce qu'elle est. Une mesure vieille de plus de deux
-minutes signale un retard d'ingestion. Ce seuil-là vient du guide
-d'intégration et reste écrit dans `src/api/readings.ts` ; le bandeau d'EV-18,
-lui, tient le sien de l'API. Les aligner — c'est-à-dire faire lire à ce panneau
-le `stale_threshold_seconds` du contrat — relève d'**EV-52**, qui reprend le
-panneau temps réel.
+minutes signale un retard d'ingestion — **au seuil de l'API**, depuis EV-52 :
+le panneau reçoit le `stale_threshold_seconds` du contrat et n'utilise le seuil
+du guide d'intégration, écrit dans `src/api/readings.ts`, que s'il n'en reçoit
+aucun. Deux seuils différents sur le même écran, l'un ici et l'autre dans le
+bandeau, auraient fini par se contredire.
+
+Une mesure **écartée des agrégats** (`excluded`) y est signalée avec son motif,
+sans être cachée : elle reste affichée telle qu'elle a été relevée, mais on sait
+qu'elle ne compte pas dans les moyennes de l'API.
 
 **Recommandations** tient sa place dans la mise en page sans rien afficher, et
 c'est désormais un retard et non une impossibilité : le contrat **1.5.0**
@@ -359,6 +364,55 @@ publie `GET /sites/{id}/recommendations`, servi par l'API. Le brancher relève
 d'**EV-54**. La zone reste donc vide en attendant, plutôt que remplie de
 conseils inventés : sur une facture d'électricité, ils seraient lus comme de
 vrais conseils.
+
+### Diagnostics du site
+
+**EV-52** ajoute une seconde rangée, sous la maquette : trois panneaux qui
+expliquent la consommation affichée au-dessus — d'où viennent les mesures, ce
+qui a été écarté, et ce que valent les prévisions.
+
+![Les trois panneaux de diagnostic, et le cas d'une prévision pas encore comparable](docs/images/app-diagnostics-site.png)
+
+**Ingestion des mesures** sépare deux instants que rien ne permettait de
+distinguer avant le contrat 1.5.0 : l'heure à laquelle la mesure a été prise
+(`last_measure_at`) et celle à laquelle elle a été écrite en base
+(`last_ingested_at`). L'écart entre les deux désigne le coupable — un âge de
+mesure élevé avec un délai d'ingestion faible dit que la source s'est tue ;
+l'inverse dit que la collecte a pris du retard sur une source qui produisait
+bien. Le bloc « collecteur » n'est affiché que si l'API en sert un, et la
+dernière erreur y est présentée comme *résolue* quand il n'y a plus d'échec en
+cours : l'API la conserve pour dire de quoi un site relève, pas qu'il est en
+panne maintenant.
+
+**Écart prédiction / réel** affiche l'erreur moyenne en kilowatts, le biais
+**signé** — « le modèle surestime » ou « sous-estime », ce qu'une erreur
+absolue ne peut pas dire — la part des mesures tombées dans l'intervalle
+annoncé, et le verdict de dérive rapporté au seuil de l'API. Rien n'est
+recalculé côté navigateur : l'API compare les prévisions *archivées*, celles
+qui ont réellement été servies, et un second calcul ici donnerait un chiffre
+différent sans qu'on sache lequel croire.
+
+> **Le piège du booléen.** `drift` vaut `false` quand aucune paire
+> prévision/mesure n'existe, et le contrat le dit explicitement : « rien n'a
+> été mesuré, ce n'est pas une absence de dérive ». Le panneau n'affiche donc
+> **aucun verdict** tant que `paired_points` vaut zéro — c'est le cas courant
+> tant que le job de prédiction n'a pas tourné — au lieu du « pas de dérive »
+> rassurant que le booléen laisserait écrire. De même,
+> `within_bounds_ratio` nul se lit « aucun intervalle annoncé », et non « 0 %
+> dans l'intervalle ».
+
+**Mesures écartées et pannes de capteur** résume les mesures qu'écarte l'ETL,
+par motif et sur leur plage, puis liste les épisodes de panne servis par
+`sensors/history`. Le résumé est tiré des mesures **déjà chargées** pour le
+graphique : aucune requête de plus pour la même information. Une liste de
+1 440 lignes n'apprendrait rien — ce qui se décide, c'est combien de mesures
+ont été retirées des agrégats, pourquoi, et quand. Un motif absent est nommé
+(« motif non précisé par la source ») plutôt qu'ignoré, sans quoi le total
+resterait sans explication.
+
+Ces mesures **restent tracées** sur le graphique. Les retirer de l'affichage
+reviendrait à lisser un incident ; le panneau dit ce qu'elles sont, l'écran ne
+les cache pas.
 
 ## Flux de données
 
