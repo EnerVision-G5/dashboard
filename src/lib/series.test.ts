@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   UNSPECIFIED_EXCLUSION_REASON,
   buildChartSeries,
+  countByQuality,
   countMissingReadings,
   summarizeExclusions,
 } from "./series";
@@ -201,5 +202,46 @@ describe("summarizeExclusions", () => {
 
     expect(points[0].excluded).toBe(false);
     expect(summarizeExclusions(points).total).toBe(0);
+  });
+});
+
+describe("countByQuality", () => {
+  it("rend toujours les quatre catégories du contrat, dans l'ordre", () => {
+    const counts = countByQuality(buildChartSeries([makeReading()], []));
+
+    expect(counts.map((entry) => entry.quality)).toEqual([
+      "good",
+      "partial",
+      "degraded",
+      "critical",
+    ]);
+  });
+
+  it("compte les mesures par qualification", () => {
+    const points = buildChartSeries(
+      [
+        makeReading({ timestamp: "2026-09-02T00:00:00Z", data_quality: "good" }),
+        makeReading({ timestamp: "2026-09-02T00:01:00Z", data_quality: "good" }),
+        makeReading({ timestamp: "2026-09-02T00:02:00Z", data_quality: "critical" }),
+      ],
+      [],
+    );
+
+    expect(countByQuality(points)).toEqual([
+      { quality: "good", count: 2 },
+      { quality: "partial", count: 0 },
+      { quality: "degraded", count: 0 },
+      { quality: "critical", count: 1 },
+    ]);
+  });
+
+  it("ignore les points purement prédits, qui ne sont pas des mesures", () => {
+    const counts = countByQuality(buildChartSeries([], [makePredictionPoint()]));
+
+    expect(counts.every((entry) => entry.count === 0)).toBe(true);
+  });
+
+  it("rend des catégories vides sur une série vide", () => {
+    expect(countByQuality([])).toHaveLength(4);
   });
 });
