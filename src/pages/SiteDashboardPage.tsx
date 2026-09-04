@@ -7,7 +7,7 @@
  *
  * Trois zones sous l'en-tête, comme la maquette les nomme :
  *   - Consommation temps réel, alimentée par GET /readings/latest ;
- *   - Recommandations, sans donnée tant que le contrat n'en publie pas ;
+ *   - Recommandations, servies par l'API depuis EV-54 ;
  *   - Indicateurs, qui porte le graphique consommation / prédiction d'EV-16.
  *
  * Une seconde rangée porte les diagnostics d'EV-52 : ingestion, écart
@@ -30,6 +30,7 @@ import { SiteSelector } from "../components/SiteSelector";
 import { countMissingReadings, summarizeExclusions } from "../lib/series";
 import { useDataHealth } from "../hooks/useDataHealth";
 import { useLatestReading } from "../hooks/useLatestReading";
+import { useRecommendations } from "../hooks/useRecommendations";
 import { useSiteDiagnostics } from "../hooks/useSiteDiagnostics";
 import { useSiteSeries } from "../hooks/useSiteSeries";
 import { useSites } from "../hooks/useSites";
@@ -65,6 +66,11 @@ export function SiteDashboardPage() {
     (siteId) => sites.find((site) => site.site_id === siteId)?.site_name ?? siteId,
   );
 
+  const {
+    recommendations,
+    isLoading: recommendationsLoading,
+    error: recommendationsError,
+  } = useRecommendations(selectedSite?.site_id ?? null);
   const {
     indicators: siteIndicators,
     failures,
@@ -164,7 +170,11 @@ export function SiteDashboardPage() {
               </div>
 
               <div className="lg:col-span-3">
-                <RecommendationsPanel />
+                <RecommendationsPanel
+                  recommendations={recommendations}
+                  isLoading={recommendationsLoading}
+                  error={recommendationsError}
+                />
               </div>
 
               <div className="md:col-span-2 lg:col-span-6">

@@ -8,6 +8,7 @@ import {
   makePrediction,
   makePredictionPoint,
   makeReading,
+  makeRecommendations,
   makeSensorFailure,
   makeSensorHealth,
   makeSite,
@@ -27,6 +28,7 @@ const fetchIndicators = vi.hoisted(() => vi.fn());
 const fetchSensors = vi.hoisted(() => vi.fn());
 const fetchSiteIndicators = vi.hoisted(() => vi.fn());
 const fetchSensorHistory = vi.hoisted(() => vi.fn());
+const fetchRecommendations = vi.hoisted(() => vi.fn());
 
 vi.mock("../api/sites", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/sites")>()),
@@ -54,6 +56,10 @@ vi.mock("../api/sensors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/sensors")>()),
   fetchSensors,
   fetchSensorHistory,
+}));
+vi.mock("../api/recommendations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/recommendations")>()),
+  fetchRecommendations,
 }));
 
 const SITE_A = makeSite({ site_id: "SITE-001", site_name: "Usine Nantes Nord", status: "active" });
@@ -123,6 +129,7 @@ beforeEach(() => {
   fetchSensors.mockResolvedValue([makeSensorHealth()]);
   fetchSiteIndicators.mockResolvedValue(makeSiteIndicators({ site_id: "SITE-001" }));
   fetchSensorHistory.mockResolvedValue([]);
+  fetchRecommendations.mockResolvedValue(makeRecommendations({ site_id: "SITE-001" }));
 });
 
 afterEach(() => {
@@ -506,5 +513,62 @@ describe("SiteDashboardPage · diagnostics du site (EV-52)", () => {
     expect(
       alerts.some((alert) => alert.textContent?.includes("État de l'ingestion indisponible")),
     ).toBe(true);
+  });
+});
+
+describe("SiteDashboardPage · recommandations (EV-54)", () => {
+  it("remplit la zone Recommandations avec les actions de l'API", async () => {
+    renderPage();
+
+    expect(
+      await screen.findByText("Pointe prévue à 18 h : décaler la charge du four si possible."),
+    ).toBeDefined();
+    expect(screen.getByText("élevée")).toBeDefined();
+    expect(fetchRecommendations).toHaveBeenCalledWith(
+      expect.objectContaining({ siteId: "SITE-001" }),
+    );
+  });
+
+  it("suit le site choisi", async () => {
+    renderPage();
+    await screen.findByText("Pointe prévue à 18 h : décaler la charge du four si possible.");
+
+    fireEvent.change(screen.getByLabelText("Site"), { target: { value: "SITE-002" } });
+
+    await waitFor(() => {
+      expect(fetchRecommendations).toHaveBeenLastCalledWith(
+        expect.objectContaining({ siteId: "SITE-002" }),
+      );
+    });
+  });
+
+  it("garde les mesures affichées quand seules les recommandations échouent", async () => {
+    fetchRecommendations.mockRejectedValue(
+      new ApiError("L'API métier est injoignable.", null),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
+    const alerts = await screen.findAllByRole("alert");
+    expect(
+      alerts.some((alert) => alert.textContent?.includes("Recommandations indisponibles")),
+    ).toBe(true);
+  });
+
+  it("reprend la raison de l'API quand aucune action n'est à proposer", async () => {
+    fetchRecommendations.mockResolvedValue(
+      makeRecommendations({
+        items: [],
+        detail: "Aucune prévision archivée sur l'horizon demandé.",
+        model_version: null,
+      }),
+    );
+
+    renderPage();
+
+    expect(
+      await screen.findByText("Aucune prévision archivée sur l'horizon demandé."),
+    ).toBeDefined();
   });
 });
