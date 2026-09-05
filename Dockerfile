@@ -17,20 +17,17 @@ RUN npm run build
 
 # --- Étape 2 : service des fichiers statiques -----------------------------
 # Image Nginx non-root : écoute sur 8080, tourne en uid 101, aucun toolchain.
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+# Branche stable 1.30, épinglée par version complète et digest : le contenu ne
+# dérive plus entre deux constructions, et monter de version est un changement
+# relu comme un autre. La branche 1.27 était en fin de vie depuis juin 2025.
+FROM nginxinc/nginx-unprivileged:1.30.4-alpine@sha256:9b87ad3dd9f431c733f19dfb278c7eb3dba9dca381942c79818bb42f1a566a83 AS runtime
 
-# La base nginx-unprivileged:1.27-alpine est un tag flottant : son contenu
-# dérive entre deux constructions sans que le Dockerfile change, et Grype (job
-# sca-grype de la CI) l'a rattrapé — libcrypto3, libssl3, libxml2, curl,
-# libpng, libexpat, nghttp2-libs, tous en retard sur leur correctif au sein de
-# la même version mineure d'Alpine. `apk upgrade` les met à niveau sans
-# changer la version d'Alpine elle-même, donc sans risque de compatibilité :
-# --no-cache évite de laisser un index de paquets périmé dans l'image.
-#
-# L'image tourne en uid 101 (nginx) par défaut, sans droit d'écriture sur la
-# base apk : `USER root` le temps de la mise à jour, puis retour explicite à
-# l'utilisateur non privilégié. Rien d'autre ne tourne jamais en root — ni le
-# serveur, ni le conteneur final.
+# Les paquets Alpine de l'image de base prennent du retard sur leurs correctifs
+# entre deux publications de l'image (libuuid, apk-tools au moment du passage
+# en 1.30.4, tous relevés par Grype). `apk upgrade` les rattrape au sein de la
+# même version d'Alpine, donc sans risque de compatibilité. L'image tourne en
+# uid 101 sans droit d'écriture sur la base apk : `USER root` le temps de la
+# mise à jour, puis retour à l'utilisateur non privilégié.
 USER root
 RUN apk update && apk upgrade --no-cache
 USER nginx
