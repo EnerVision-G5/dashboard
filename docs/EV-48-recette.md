@@ -64,14 +64,12 @@ compose de l'API, qui démarre un Postgres nu, sans schéma.
 cp .env.example .env.local
 ```
 
-L'API métier ne publiant aucun en-tête `Access-Control-*`, passer par le proxy
-de développement :
+Passer par le proxy de développement, qui évite le cross-origin (l'API métier
+n'autorise que les origines listées dans `CORS_ALLOWED_ORIGINS`) :
 
 ```bash
 VITE_API_BASE_URL=/proxy/api
-VITE_PREDICT_BASE_URL=/proxy/predict
 VITE_DEV_PROXY_API_TARGET=http://localhost:8080
-VITE_DEV_PROXY_PREDICT_TARGET=http://localhost:8001
 VITE_PREDICTION_SOURCE=fixture
 ```
 
