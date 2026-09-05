@@ -1,27 +1,34 @@
 name: ci
 
-# Déclenchée uniquement par pull request : sur une branche de travail, chaque
-# push rejouait la CI sans que personne ne lise le résultat avant l'ouverture
-# de la PR. Conséquence assumée : un push direct sur une branche protégée
-# n'est plus testé, le passage par une PR devient la seule voie contrôlée.
-# workflow_call est conservé : cd.yml appelle cette CI juste avant le build de
-# l'image, donc rien n'est publié sans avoir été testé.
+# Sur chaque pull request et sur develop après fusion. master n'est pas listé :
+# cd.yml rejoue cette CI avant de construire l'image, un push sur master est
+# donc testé une fois, pas deux.
 on:
   pull_request:
-  # Réutilisable : cd.yml appelle ce workflow pour garder une seule définition
-  # des étapes lint / tests / build et des scans de sécurité.
+  push:
+    branches: [develop]
   workflow_call:
+    inputs:
+      skip-image-scans:
+        description: >-
+          Ne pas scanner ici une image reconstruite : l'appelant scanne
+          lui-même l'image qu'il publie.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 jobs:
   lint-test-build:
     name: Lint, tests et build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
@@ -37,43 +44,32 @@ jobs:
       - name: Build
         run: npm run build
 
-  # Analyse de composition logicielle. C'est l'image de production qui est
-  # scannée, pas package-lock.json seul : les CVE arrivent aussi par les
-  # couches de base node:24-alpine et nginx-unprivileged, que le lock du projet
-  # ne décrit pas.
+  # Sur une pull request, l'image scannée est reconstruite ici : elle éprouve
+  # le Dockerfile et les couches de base, pas l'image livrée, que cd.yml
+  # scanne lui-même avant de la publier. Bloquant sur les CVE High et Critical
+  # qui ont un correctif.
   sca-grype:
-    name: Grype (CVE de l'image)
+    name: Grype (CVE corrigeables de l'image)
+    needs: lint-test-build
+    if: ${{ !inputs.skip-image-scans }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Scan informatif, sur décision d'équipe : une alerte est visible en échec
-    # mais ne bloque pas la CI. Les dérogations argumentées et datées sont
-    # documentées dans le SECURITY.md du dépôt api, l'image de base étant
-    # commune aux deux services.
-    continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      # Même Dockerfile que la livraison : ce qui est scanné ici est ce qui
-      # sera publié par cd.yml, à l'identique.
       - name: Construire l'image à scanner
         run: docker build -t enervision-dashboard:scan .
 
       - name: Grype
-        uses: anchore/scan-action@v6
+        uses: anchore/scan-action@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
         with:
           image: enervision-dashboard:scan
-          # Bloque la CI sur High et Critical seulement, et seulement si un
-          # correctif existe : une CVE sans version corrigée n'est pas une
-          # action possible, la signaler bloquerait toutes les PR sans que
-          # personne ne puisse la lever.
           severity-cutoff: high
           only-fixed: true
           fail-build: true
           output-format: table
           output-file: grype-report.txt
 
-      # always() : ces deux étapes doivent tourner même quand Grype a bloqué,
-      # sinon le rapport qui explique l'échec n'est jamais publié.
       - name: Récapitulatif
         if: always()
         run: |
@@ -87,83 +83,30 @@ jobs:
 
       - name: Publier le rapport
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: grype-report
           path: grype-report.txt
           if-no-files-found: warn
 
-  # Scan dynamique (DAST) : l'image de production est réellement démarrée, et
-  # c'est elle que ZAP interroge. Sur une application monopage compilée, ce que
-  # le scan éprouve est la configuration de service — en-têtes de réponse,
-  # directives de cache, exposition de fichiers non prévus — puisque le reste
-  # du comportement vit côté navigateur et côté API.
+  # Scan dynamique : l'image est démarrée et c'est elle que ZAP interroge. Sur
+  # une application monopage compilée, c'est la configuration de service qui
+  # est éprouvée (en-têtes, cache, fichiers exposés). Bloquant : toute alerte
+  # absente de .zap/rules.tsv fait échouer le job.
   dast-zap:
     name: OWASP ZAP (scan du dashboard)
+    needs: lint-test-build
+    if: ${{ !inputs.skip-image-scans }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Scan informatif, sur décision d'équipe : une alerte est visible en échec
-    # mais ne bloque pas la CI. Les dérogations argumentées et datées sont
-    # documentées dans le SECURITY.md du dépôt api, l'image de base étant
-    # commune aux deux services.
-    continue-on-error: true
-
-    env:
-      SCAN_TARGET: http://127.0.0.1:8080
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Construire l'image à scanner
         run: docker build -t enervision-dashboard:scan .
 
-      - name: Démarrer le dashboard à scanner
-        run: |
-          docker run --rm -d --name dashboard-scan -p 8080:8080 \
-            enervision-dashboard:scan
-          ok=0
-          for _ in $(seq 1 30); do
-            if curl -fsS "$SCAN_TARGET/healthz" >/dev/null; then
-              ok=1
-              break
-            fi
-            sleep 1
-          done
-          docker logs dashboard-scan
-          test "$ok" = 1
-
-      # Codes de sortie de zap-baseline.py : 1 si une règle FAIL est
-      # déclenchée, 2 si une alerte reste en WARN, donc toute alerte non listée
-      # dans .zap/rules.tsv casse le job. Pour rendre le scan informatif au lieu
-      # de bloquant, ajouter -I à la commande ci-dessous.
-      #
-      # Pas d'araignée AJAX (-j) : le dashboard n'a pas d'API à joindre sur le
-      # runner, les routes applicatives ne rendraient donc que leur état
-      # d'erreur. L'exploration reste sur ce que Nginx sert réellement, ce qui
-      # rend aussi le résultat reproductible d'un run à l'autre.
-      #
-      # ZAP tourne dans son propre conteneur : --network host pour qu'il
-      # atteigne le port publié par le runner, et /zap/wrk monté sur un
-      # répertoire du workspace pour en ressortir les rapports. Le conteneur
-      # écrit sous un autre uid que le runner, d'où le chmod.
       - name: OWASP ZAP
-        run: |
-          mkdir -p zap-report
-          cp .zap/rules.tsv zap-report/rules.tsv
-          chmod -R 777 zap-report
-          docker run --rm --network host \
-            -v "$PWD/zap-report:/zap/wrk:rw" \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py \
-              -t "$SCAN_TARGET" \
-              -c rules.tsv \
-              -r rapport.html \
-              -w rapport.md \
-              -J rapport.json
-
-      - name: Arrêter le dashboard
-        if: always()
-        run: docker rm -f dashboard-scan >/dev/null 2>&1 || true
+        run: .github/scripts/zap-baseline.sh enervision-dashboard:scan
 
       - name: Récapitulatif
         if: always()
@@ -176,7 +119,7 @@ jobs:
 
       - name: Publier le rapport
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: zap-report
           path: zap-report/rapport.*
