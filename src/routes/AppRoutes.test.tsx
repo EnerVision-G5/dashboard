@@ -56,7 +56,6 @@ async function signIn() {
 
 beforeEach(() => {
   vi.stubEnv("VITE_API_BASE_URL", "http://api.test");
-  vi.stubEnv("VITE_PREDICT_BASE_URL", "http://predict.test");
   requestToken.mockResolvedValue({
     access_token: TOKEN,
     token_type: "bearer",

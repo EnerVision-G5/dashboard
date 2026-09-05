@@ -126,7 +126,6 @@ function renderPage({ role = "reader" as "reader" | "writer" } = {}) {
 
 beforeEach(() => {
   vi.stubEnv("VITE_API_BASE_URL", "http://api.test");
-  vi.stubEnv("VITE_PREDICT_BASE_URL", "http://predict.test");
   fetchSites.mockResolvedValue([SITE_A, SITE_B]);
   fetchReadings.mockResolvedValue(readingsOf("SITE-001", 100));
   fetchLatestReading.mockResolvedValue(
