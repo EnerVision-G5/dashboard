@@ -644,6 +644,47 @@ Au chargement, le premier site dont le `status` vaut `active` est présélection
 les deux flux ; la requête précédente est annulée (`AbortController`), et les
 données ne sont affichées que si elles proviennent bien du site demandé.
 
+### Grandeur tracée
+
+Le graphique ne montrait que la consommation, alors que chaque mesure porte six
+grandeurs. Les cinq autres répondent à une question que la consommation seule
+laisse ouverte : une chute de puissance vient-elle d'un arrêt de production,
+d'une baisse de tension, ou d'un capteur qui a lâché ?
+
+| Grandeur | Unité | Champ du contrat | Prédite |
+| --- | --- | --- | --- |
+| Consommation | kW | `consumption_kw` | **oui** |
+| Tension | V | `voltage_v` | non |
+| Intensité | A | `current_a` | non |
+| Température | °C | `temperature_celsius` | non |
+| Humidité | % | `humidity_percent` | non |
+| Facteur de puissance | — | `power_factor` | non |
+
+![Le graphique sur la température, sans courbe de prédiction](docs/images/app-grandeur-temperature.png)
+
+Changer de grandeur **ne relance aucun appel** : `buildChartSeries` transporte
+les six valeurs de chaque mesure, déjà chargées pour la fenêtre. C'est un
+réglage d'affichage, pas une requête.
+
+**Une seule grandeur est prédite.** Le modèle ne prévoit ni la température ni la
+tension, et le contrat ne publie qu'un `predicted_consumption_kw` : sur les
+autres grandeurs, la courbe de prédiction n'est pas masquée par choix
+esthétique, **elle n'existe pas**. L'écran le dit — « Le modèle ne prévoit que
+la consommation » — plutôt que d'afficher une courbe vide, qu'on lirait comme
+une prévision manquante. L'infobulle omet la ligne de prédiction pour la même
+raison.
+
+L'axe, son unité et le domaine suivent la grandeur : `valueDomain` exclut la
+prédiction hors de la consommation, sans quoi une tension en volts serait
+écrasée par des kilowatts.
+
+Le facteur de puissance n'a **pas d'unité** : c'est un rapport, et écrire
+« 0,95 pf » inventerait une notation que personne n'utilise.
+
+Les unités et les décimales vivent dans `src/lib/measures.ts`, pas dans les
+composants : c'est ce qui garantit qu'une tension s'affiche partout avec la même
+précision.
+
 ### Période de l'historique
 
 **EV-53** permet de choisir la période affichée, de deux façons parce qu'elles

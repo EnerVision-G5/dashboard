@@ -7,6 +7,7 @@ import {
   PREDICTED_SERIES_LABEL,
 } from "./ConsumptionPredictionChart";
 import { buildChartSeries } from "../lib/series";
+import { measureOf } from "../lib/measures";
 import { makePredictionPoint, makeReading } from "../test/doubles";
 
 vi.mock("recharts", async (importOriginal) => {
@@ -98,4 +99,45 @@ describe("ConsumptionPredictionChart · pontage des trous", () => {
     expect(pontage?.getAttribute("stroke-opacity")).toBe("0.45");
   });
 
+});
+
+describe("ConsumptionPredictionChart · grandeur tracée", () => {
+  it("trace la consommation et sa prédiction par défaut", () => {
+    const { container } = render(
+      <ConsumptionPredictionChart points={POINTS} description="Graphique de test" />,
+    );
+
+    expect(screen.getByText(ACTUAL_SERIES_LABEL)).toBeDefined();
+    expect(screen.getByText(PREDICTED_SERIES_LABEL)).toBeDefined();
+    expect(container.querySelector(".serie-predite")).not.toBeNull();
+  });
+
+  it("n'affiche aucune courbe prédite sur une grandeur non prédite", () => {
+    const { container } = render(
+      <ConsumptionPredictionChart
+        points={POINTS}
+        measure={measureOf("temperature")}
+        description="Graphique de test"
+      />,
+    );
+
+    // Le modèle ne prévoit que la consommation : afficher une courbe vide
+    // laisserait croire à une prévision manquante.
+    expect(container.querySelector(".serie-predite")).toBeNull();
+    expect(screen.queryByText(PREDICTED_SERIES_LABEL)).toBeNull();
+    expect(screen.getByText("Température (°C)")).toBeDefined();
+  });
+
+  it("garde la mesure et son pontage sur une autre grandeur", () => {
+    const { container } = render(
+      <ConsumptionPredictionChart
+        points={POINTS}
+        measure={measureOf("voltage")}
+        description="Graphique de test"
+      />,
+    );
+
+    expect(container.querySelector(".serie-mesuree .recharts-line-curve")).not.toBeNull();
+    expect(container.querySelector(".serie-pontage .recharts-line-curve")).not.toBeNull();
+  });
 });

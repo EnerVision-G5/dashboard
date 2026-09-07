@@ -29,11 +29,14 @@ import {
 } from "recharts";
 import type { ChartPoint } from "../lib/series";
 import { valueDomain } from "../lib/series";
+import type { Measure } from "../lib/measures";
+import { formatMeasure, measureOf, seriesLabel } from "../lib/measures";
 import { token } from "../ui/tokens";
 
 /** Libellés des deux séries, partagés avec la légende et le survol. */
 export const ACTUAL_SERIES_LABEL = "Consommation réelle (kW)";
 export const PREDICTED_SERIES_LABEL = "Prédiction (kW)";
+
 
 /**
  * Libellé du trait qui joint deux mesures séparées par un trou.
@@ -100,10 +103,13 @@ function formatKw(value: number | null): string {
 interface TooltipProps {
   active?: boolean;
   payload?: { payload: ChartPoint }[];
+  /** Grandeur tracée, pour n'afficher que ce que la courbe montre. */
+  measure?: Measure;
 }
 
-function SeriesTooltip({ active, payload }: TooltipProps) {
+function SeriesTooltip({ active, payload, measure }: TooltipProps) {
   const point = payload?.[0]?.payload;
+  const grandeur = measure ?? measureOf("consumption");
   if (active !== true || point === undefined) {
     return null;
   }
@@ -114,11 +120,17 @@ function SeriesTooltip({ active, payload }: TooltipProps) {
         {DATE_TIME_FORMAT.format(new Date(point.timestamp))}
       </p>
       <p style={{ color: ACTUAL_COLOR }}>
-        {ACTUAL_SERIES_LABEL} : {formatKw(point.actualKw)}
+        {seriesLabel(grandeur)} :{" "}
+        {formatMeasure(point.values[grandeur.key], grandeur)}
       </p>
-      <p style={{ color: PREDICTED_COLOR }}>
-        {PREDICTED_SERIES_LABEL} : {formatKw(point.predictedKw)}
-      </p>
+      {/* La prédiction n'est mentionnée que là où elle existe : sur une autre
+          grandeur, une ligne « Prédiction : — » ferait croire à une valeur
+          manquante plutôt qu'à une prévision qui n'a jamais été calculée. */}
+      {grandeur.predicted && (
+        <p style={{ color: PREDICTED_COLOR }}>
+          {PREDICTED_SERIES_LABEL} : {formatKw(point.predictedKw)}
+        </p>
+      )}
       {point.dataQuality !== null && (
         <p className="text-slate-600">Qualité de la mesure : {QUALITY_LABELS[point.dataQuality]}</p>
       )}
@@ -138,13 +150,23 @@ interface ConsumptionPredictionChartProps {
   points: readonly ChartPoint[];
   /** Description lue par les technologies d'assistance. */
   description: string;
+  /**
+   * Grandeur tracée. Par défaut la consommation, seule grandeur prédite.
+   *
+   * Sur les autres, la courbe de prédiction n'est pas masquée : le modèle ne
+   * prévoit que la consommation, et le contrat ne publie rien d'autre.
+   */
+  measure?: Measure;
 }
 
 export function ConsumptionPredictionChart({
   points,
   description,
+  measure,
 }: ConsumptionPredictionChartProps) {
   const formatTick = axisFormatter(points);
+  const grandeur = measure ?? measureOf("consumption");
+  const dataKey = `values.${grandeur.key}`;
 
   return (
     <figure className="m-0">
@@ -163,16 +185,21 @@ export function ConsumptionPredictionChart({
               tick={{ fontSize: 12 }}
             />
             <YAxis
-              domain={valueDomain(points)}
+              domain={valueDomain(points, grandeur.key)}
               // Les bornes sont calculées : les laisser s'étendre à un nombre
               // « rond » les ramènerait vers zéro et annulerait le cadrage.
               allowDataOverflow={false}
               stroke={token("axe")}
               tick={{ fontSize: 12 }}
               width={64}
-              label={{ value: "kW", angle: -90, position: "insideLeft", fill: token("axe") }}
+              label={{
+                value: grandeur.unit === "" ? grandeur.label : grandeur.unit,
+                angle: -90,
+                position: "insideLeft",
+                fill: token("axe"),
+              }}
             />
-            <Tooltip content={<SeriesTooltip />} />
+            <Tooltip content={<SeriesTooltip measure={grandeur} />} />
             <Legend />
             {/* Pontage des trous, tracé EN PREMIER donc sous la courbe réelle.
                 Sur le parc actuel, plus de mille mesures manquent sur une
@@ -187,7 +214,7 @@ export function ConsumptionPredictionChart({
             <Line
               className="serie-pontage"
               type="monotone"
-              dataKey="actualKw"
+              dataKey={dataKey}
               name={BRIDGE_SERIES_LABEL}
               stroke={ACTUAL_COLOR}
               strokeOpacity={0.45}
@@ -201,26 +228,31 @@ export function ConsumptionPredictionChart({
             <Line
               className="serie-mesuree"
               type="monotone"
-              dataKey="actualKw"
-              name={ACTUAL_SERIES_LABEL}
+              dataKey={dataKey}
+              name={seriesLabel(grandeur)}
               stroke={ACTUAL_COLOR}
               strokeWidth={2}
               dot={false}
               connectNulls={false}
               isAnimationActive={false}
             />
-            <Line
-              className="serie-predite"
-              type="monotone"
-              dataKey="predictedKw"
-              name={PREDICTED_SERIES_LABEL}
-              stroke={PREDICTED_COLOR}
-              strokeWidth={2}
-              strokeDasharray="6 4"
-              dot={false}
-              connectNulls={false}
-              isAnimationActive={false}
-            />
+            {/* Une seule grandeur est prédite : ailleurs, cette courbe
+                n'existe pas, et l'afficher vide laisserait croire à une
+                prévision manquante. */}
+            {grandeur.predicted && (
+              <Line
+                className="serie-predite"
+                type="monotone"
+                dataKey="predictedKw"
+                name={PREDICTED_SERIES_LABEL}
+                stroke={PREDICTED_COLOR}
+                strokeWidth={2}
+                strokeDasharray="6 4"
+                dot={false}
+                connectNulls={false}
+                isAnimationActive={false}
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>

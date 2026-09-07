@@ -7,6 +7,10 @@
  * agit sur la source ont rejoint l'écran de diagnostic. Onze cartes sur une
  * page faisaient un mur ; il en reste quatre, et une hiérarchie.
  *
+ * Le graphique trace la grandeur choisie — consommation, tension, intensité,
+ * température, humidité, facteur de puissance — sans recharger : les mesures
+ * portent toutes les grandeurs. Seule la consommation est prédite.
+ *
  * L'ordre de lecture est celui de l'écran : l'état du site en une bande de
  * tuiles, la courbe qui l'inscrit dans le temps, puis les deux listes qui la
  * commentent — ce qu'il faudrait faire, et ce qui vient de se produire.
@@ -20,11 +24,13 @@ import { ConsumptionPredictionChart } from "../components/ConsumptionPredictionC
 import { DataQualityBanner } from "../components/DataQualityBanner";
 import { DataQualityBarChart } from "../components/DataQualityBarChart";
 import { DemoDataBadge } from "../components/DemoDataBadge";
+import { MeasurePicker } from "../components/MeasurePicker";
 import { RealtimeConsumptionPanel } from "../components/RealtimeConsumptionPanel";
 import { RecommendationsPanel } from "../components/RecommendationsPanel";
 import { SiteHeader } from "../components/SiteHeader";
 import { TimeRangePicker } from "../components/TimeRangePicker";
 import { countMissingReadings } from "../lib/series";
+import { measureOf, seriesLabel } from "../lib/measures";
 import { DEFAULT_WINDOW_HOURS, recentWindow } from "../lib/timeWindow";
 import { useAlerts } from "../hooks/useAlerts";
 import { useDataHealth } from "../hooks/useDataHealth";
@@ -49,6 +55,10 @@ export function SiteDashboardPage() {
   const [timeWindow, setTimeWindow] = useState(() =>
     recentWindow(new Date(), DEFAULT_WINDOW_HOURS),
   );
+  // La grandeur tracée est un réglage d'affichage : elle ne relance aucun
+  // appel, les mesures portant déjà toutes les grandeurs.
+  const [measureKey, setMeasureKey] = useState("consumption");
+  const measure = measureOf(measureKey);
 
   const {
     points,
@@ -92,7 +102,7 @@ export function SiteDashboardPage() {
     selectedSite?.site_id ?? null,
   );
 
-  const hasActual = points.some((point) => point.actualKw !== null);
+  const hasActual = points.some((point) => point.values[measure.key] !== null);
   const hasPredicted = points.some((point) => point.predictedKw !== null);
   const missingReadings = countMissingReadings(points);
 
@@ -155,12 +165,18 @@ export function SiteDashboardPage() {
 
             <Card
               title="Indicateurs"
-              description={`Consommation et prédiction sur ${windowHours} h`}
+              description={
+                measure.predicted
+                  ? `${measure.label} et prédiction sur ${windowHours} h`
+                  : `${measure.label} sur ${windowHours} h`
+              }
             >
               <div className="flex flex-col gap-4">
                 {/* La clé remonte le sélecteur quand la fenêtre change par un
                     bouton de durée rapide : ses champs repartent alors de la
                     période appliquée. */}
+                <MeasurePicker measure={measure} onSelect={setMeasureKey} />
+
                 <TimeRangePicker
                   key={`${timeWindow.startTime}-${timeWindow.endTime}`}
                   window={timeWindow}
@@ -185,7 +201,8 @@ export function SiteDashboardPage() {
                 ) : (
                   <ConsumptionPredictionChart
                     points={points}
-                    description={`Consommation réelle et prédiction du site ${selectedSite.site_name}, en kilowatts, du ${new Date(timeWindow.startTime).toLocaleString("fr-FR")} au ${new Date(timeWindow.endTime).toLocaleString("fr-FR")}.`}
+                    measure={measure}
+                    description={`${seriesLabel(measure)}${measure.predicted ? " et prédiction" : ""} du site ${selectedSite.site_name}, du ${new Date(timeWindow.startTime).toLocaleString("fr-FR")} au ${new Date(timeWindow.endTime).toLocaleString("fr-FR")}.`}
                   />
                 )}
 
@@ -200,10 +217,18 @@ export function SiteDashboardPage() {
 
                 <ul className="flex flex-wrap gap-x-6 gap-y-1 text-corps text-ardoise-600">
                   {!seriesLoading && !hasActual && (
-                    <li>Aucune mesure de consommation réelle sur la fenêtre.</li>
+                    <li>
+                      Aucune mesure de {measure.label.toLowerCase()} sur la fenêtre.
+                    </li>
                   )}
-                  {!seriesLoading && !hasPredicted && (
+                  {/* Le silence de la prédiction ne se commente que là où elle
+                      existe : sur une autre grandeur, le modèle ne prévoit
+                      rien, et l'annoncer manquant serait faux. */}
+                  {!seriesLoading && measure.predicted && !hasPredicted && (
                     <li>Aucun point de prédiction sur la fenêtre.</li>
+                  )}
+                  {!measure.predicted && (
+                    <li>Le modèle ne prévoit que la consommation.</li>
                   )}
                   {missingReadings > 0 && (
                     <li>
