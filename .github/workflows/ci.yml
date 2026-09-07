@@ -1,10 +1,13 @@
 name: ci
 
-# Sur chaque pull request et sur develop après fusion. master n'est pas listé :
-# cd.yml rejoue cette CI avant de construire l'image, un push sur master est
-# donc testé une fois, pas deux.
+# Sur chaque pull request vers develop, et sur develop après fusion. Une PR
+# vers master a develop pour tête : son commit est déjà testé par le run du
+# push, dont les checks s'affichent sur la PR, la relancer le testerait deux
+# fois. master n'est pas listé non plus : cd.yml rejoue cette CI avant de
+# construire l'image.
 on:
   pull_request:
+    branches-ignore: [master]
   push:
     branches: [develop]
   workflow_call:
