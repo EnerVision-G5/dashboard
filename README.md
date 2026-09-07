@@ -622,6 +622,25 @@ Deux conséquences que l'écran assume :
 `offset` jusqu'à couvrir la fenêtre. Une page vide interrompt la boucle, et un
 plafond de 20 pages la borne si le serveur annonçait un total incohérent.
 
+### Répartition de la qualité des mesures
+
+**EV-19** ajoute, sous la courbe, un graphique en barres de la répartition des
+mesures par qualité annoncée par la source. Il n'appelle rien : les mesures
+sont déjà chargées pour le graphique principal, et `countByQuality` les résume.
+
+Deux règles du design system s'y appliquent :
+
+- **les quatre catégories sont toujours dessinées**, même à zéro. Une barre
+  absente et une barre vide ne disent pas la même chose, et un graphique dont
+  les catégories changent d'une fenêtre à l'autre se compare mal ;
+- la couleur suit la gravité mais **ne la porte pas seule** : chaque barre est
+  nommée sur l'axe et le nombre est écrit à son extrémité — sur une fenêtre où
+  une catégorie écrase les autres, les petites barres seraient illisibles à
+  l'échelle.
+
+Les points purement prédits sont ignorés : aucune mesure ne leur correspond, et
+les compter reviendrait à qualifier une prévision comme une mesure.
+
 ### Valeurs nulles et valeurs imputées
 
 L'API conserve les valeurs brutes de la source. Le dashboard fait de même :

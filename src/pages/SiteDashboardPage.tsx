@@ -26,6 +26,7 @@
 import { AlertsPanel } from "../components/AlertsPanel";
 import { ConsumptionPredictionChart } from "../components/ConsumptionPredictionChart";
 import { DataQualityBanner } from "../components/DataQualityBanner";
+import { DataQualityBarChart } from "../components/DataQualityBarChart";
 import { DemoDataBadge } from "../components/DemoDataBadge";
 import { ExcludedMeasuresPanel } from "../components/ExcludedMeasuresPanel";
 import { ForecastAccuracyPanel } from "../components/ForecastAccuracyPanel";
@@ -267,6 +268,15 @@ export function SiteDashboardPage() {
                         points={points}
                         description={`Consommation réelle et prédiction du site ${selectedSite.site_name}, en kilowatts, du ${new Date(timeWindow.startTime).toLocaleString("fr-FR")} au ${new Date(timeWindow.endTime).toLocaleString("fr-FR")}.`}
                       />
+                    )}
+
+                    {!seriesLoading && points.length > 0 && (
+                      <div>
+                        <h3 className="text-annexe font-medium tracking-wide text-ardoise-600 uppercase">
+                          Qualité des mesures de la fenêtre
+                        </h3>
+                        <DataQualityBarChart points={points} />
+                      </div>
                     )}
 
                     <ul className="flex flex-wrap gap-x-6 gap-y-1 text-corps text-ardoise-600">

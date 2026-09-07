@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { SiteDashboardPage } from "./SiteDashboardPage";
 import { ApiError } from "../api/http";
 import { AuthContext } from "../auth/AuthContext";
@@ -499,8 +506,15 @@ describe("SiteDashboardPage · diagnostics du site (EV-52)", () => {
 
     renderPage();
 
-    expect(await screen.findByText("1")).toBeDefined();
-    expect(screen.getByText("1 × temperature_sensor_failure")).toBeDefined();
+    // Le graphique de qualité d'EV-19 affiche aussi des chiffres seuls : on
+    // compte le total dans le panneau qui en parle.
+    expect(
+      await screen.findByText("1 × temperature_sensor_failure"),
+    ).toBeDefined();
+    const panneau = screen.getByRole("region", {
+      name: "Mesures écartées et pannes de capteur",
+    });
+    expect(within(panneau).getByText("1")).toBeDefined();
   });
 
   it("affiche l'historique des pannes du site affiché", async () => {

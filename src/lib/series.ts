@@ -119,6 +119,46 @@ export function countMissingReadings(points: readonly ChartPoint[]): number {
   return points.filter((point) => point.dataQuality !== null && point.actualKw === null).length;
 }
 
+/** Répartition des mesures d'une fenêtre par qualification de la source. */
+export interface QualityCount {
+  /** Qualification telle que le contrat l'énumère. */
+  quality: NonNullable<ChartPoint["dataQuality"]>;
+  /** Nombre de mesures portant cette qualification. */
+  count: number;
+}
+
+/** Les quatre qualifications, dans l'ordre du contrat, du meilleur au pire. */
+const QUALITY_ORDER: NonNullable<ChartPoint["dataQuality"]>[] = [
+  "good",
+  "partial",
+  "degraded",
+  "critical",
+];
+
+/**
+ * Compte les mesures par qualification (EV-19).
+ *
+ * Les quatre catégories sont toujours rendues, même à zéro : une barre absente
+ * et une barre vide ne disent pas la même chose, et un graphique dont les
+ * catégories changent d'une fenêtre à l'autre se compare mal.
+ *
+ * Les points purement prédits sont ignorés — leur `dataQuality` est nulle,
+ * puisqu'aucune mesure ne leur correspond. Les compter reviendrait à qualifier
+ * une prévision comme une mesure.
+ */
+export function countByQuality(points: readonly ChartPoint[]): QualityCount[] {
+  const counts = new Map<NonNullable<ChartPoint["dataQuality"]>, number>(
+    QUALITY_ORDER.map((quality) => [quality, 0]),
+  );
+  for (const point of points) {
+    if (point.dataQuality === null) {
+      continue;
+    }
+    counts.set(point.dataQuality, (counts.get(point.dataQuality) ?? 0) + 1);
+  }
+  return QUALITY_ORDER.map((quality) => ({ quality, count: counts.get(quality) ?? 0 }));
+}
+
 /** Mesures écartées d'une fenêtre, regroupées par motif. */
 export interface ExclusionSummary {
   /** Nombre total de mesures écartées. */
