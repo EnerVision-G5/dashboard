@@ -299,3 +299,75 @@ describe("valueDomain", () => {
     expect(valueDomain([])).toEqual(["auto", "auto"]);
   });
 });
+
+describe("buildChartSeries · toutes les grandeurs", () => {
+  it("transporte les six grandeurs de la mesure", () => {
+    const points = buildChartSeries(
+      [
+        makeReading({
+          consumption_kw: 157,
+          voltage_v: 399.4,
+          current_a: 239.3,
+          temperature_celsius: 7,
+          humidity_percent: 39.1,
+          power_factor: 0.95,
+        }),
+      ],
+      [],
+    );
+
+    // Les transporter évite de recharger les mesures à chaque changement de
+    // grandeur : elles sont déjà en mémoire.
+    expect(points[0].values).toEqual({
+      consumption: 157,
+      voltage: 399.4,
+      current: 239.3,
+      temperature: 7,
+      humidity: 39.1,
+      powerFactor: 0.95,
+    });
+  });
+
+  it("laisse à null une grandeur que la source n'a pas servie", () => {
+    const points = buildChartSeries(
+      [makeReading({ temperature_celsius: null, humidity_percent: null })],
+      [],
+    );
+
+    expect(points[0].values.temperature).toBeNull();
+    expect(points[0].values.humidity).toBeNull();
+  });
+
+  it("laisse toutes les grandeurs nulles sur un point purement prédit", () => {
+    const points = buildChartSeries([], [makePredictionPoint()]);
+
+    expect(Object.values(points[0].values).every((valeur) => valeur === null)).toBe(true);
+  });
+});
+
+describe("valueDomain · par grandeur", () => {
+  it("cadre sur la grandeur demandée, pas sur la consommation", () => {
+    const points = buildChartSeries(
+      [
+        makeReading({ timestamp: "2026-09-02T00:00:00Z", consumption_kw: 150, voltage_v: 398 }),
+        makeReading({ timestamp: "2026-09-02T00:01:00Z", consumption_kw: 160, voltage_v: 402 }),
+      ],
+      [],
+    );
+
+    const [min, max] = valueDomain(points, "voltage") as [number, number];
+    expect(min).toBeGreaterThan(390);
+    expect(max).toBeLessThan(410);
+  });
+
+  it("ignore la prédiction hors de la consommation", () => {
+    // L'inclure écraserait une tension en volts avec des kilowatts.
+    const points = buildChartSeries(
+      [makeReading({ voltage_v: 400 })],
+      [makePredictionPoint({ predicted_consumption_kw: 5000 })],
+    );
+
+    const [, max] = valueDomain(points, "voltage") as [number, number];
+    expect(max).toBeLessThan(500);
+  });
+});

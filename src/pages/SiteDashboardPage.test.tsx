@@ -696,3 +696,51 @@ describe("SiteDashboardPage · seuil de fraîcheur", () => {
     expect(screen.queryByText(/l'ingestion est en retard/)).toBeNull();
   });
 });
+
+describe("SiteDashboardPage · grandeur tracée", () => {
+  it("trace la consommation à l'ouverture", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
+    expect(screen.getByRole("group", { name: "Grandeur" })).toBeDefined();
+  });
+
+  it("change de grandeur sans relire les mesures", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+    const appels = fetchReadings.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: /Température/ }));
+
+    // Les mesures portent déjà toutes les grandeurs : changer d'axe est un
+    // réglage d'affichage, pas une requête.
+    expect(await screen.findByText("Température (°C)")).toBeDefined();
+    expect(fetchReadings.mock.calls.length).toBe(appels);
+  });
+
+  it("dit que le modèle ne prévoit que la consommation", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+
+    fireEvent.click(screen.getByRole("button", { name: /Tension/ }));
+
+    expect(
+      await screen.findByText("Le modèle ne prévoit que la consommation."),
+    ).toBeDefined();
+    // Et n'annonce pas une prédiction « absente » là où elle n'existe pas.
+    expect(screen.queryByText("Aucun point de prédiction sur la fenêtre.")).toBeNull();
+  });
+
+  it("revient à la consommation et retrouve sa prédiction", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+
+    fireEvent.click(screen.getByRole("button", { name: /Humidité/ }));
+    expect(await screen.findByText("Humidité (%)")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /Consommation/ }));
+
+    expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
+    expect(screen.queryByText("Le modèle ne prévoit que la consommation.")).toBeNull();
+  });
+});
