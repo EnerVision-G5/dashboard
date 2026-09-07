@@ -799,6 +799,9 @@ describe("SiteDashboardPage · période de l'historique (EV-53)", () => {
       ),
     ).toBe(true);
     expect(fetchReadings.mock.calls.length).toBe(avant);
+  });
+});
+
 describe("SiteDashboardPage · alertes actives (EV-17)", () => {
   it("affiche les alertes du site à côté des recommandations", async () => {
     renderPage();
