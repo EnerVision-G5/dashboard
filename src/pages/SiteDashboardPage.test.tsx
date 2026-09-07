@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { SiteDashboardPage } from "./SiteDashboardPage";
 import { ApiError } from "../api/http";
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthContextValue } from "../auth/AuthContext";
 import {
+  makeAlert,
   makeModel,
   makePrediction,
   makePredictionPoint,
@@ -31,6 +32,7 @@ const fetchSensors = vi.hoisted(() => vi.fn());
 const fetchSiteIndicators = vi.hoisted(() => vi.fn());
 const fetchSensorHistory = vi.hoisted(() => vi.fn());
 const fetchRecommendations = vi.hoisted(() => vi.fn());
+const fetchAlerts = vi.hoisted(() => vi.fn());
 const fetchSpikes = vi.hoisted(() => vi.fn());
 const triggerSpike = vi.hoisted(() => vi.fn());
 const fetchModels = vi.hoisted(() => vi.fn());
@@ -64,6 +66,10 @@ vi.mock("../api/sensors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/sensors")>()),
   fetchSensors,
   fetchSensorHistory,
+}));
+vi.mock("../api/alerts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/alerts")>()),
+  fetchAlerts,
 }));
 vi.mock("../api/recommendations", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/recommendations")>()),
@@ -126,7 +132,6 @@ function renderPage({ role = "reader" as "reader" | "writer" } = {}) {
 
 beforeEach(() => {
   vi.stubEnv("VITE_API_BASE_URL", "http://api.test");
-  vi.stubEnv("VITE_PREDICT_BASE_URL", "http://predict.test");
   fetchSites.mockResolvedValue([SITE_A, SITE_B]);
   fetchReadings.mockResolvedValue(readingsOf("SITE-001", 100));
   fetchLatestReading.mockResolvedValue(
@@ -150,6 +155,7 @@ beforeEach(() => {
   fetchSiteIndicators.mockResolvedValue(makeSiteIndicators({ site_id: "SITE-001" }));
   fetchSensorHistory.mockResolvedValue([]);
   fetchRecommendations.mockResolvedValue(makeRecommendations({ site_id: "SITE-001" }));
+  fetchAlerts.mockResolvedValue([makeAlert()]);
   fetchSpikes.mockResolvedValue([]);
   fetchModels.mockResolvedValue([makeModel()]);
   fetchCurrentModel.mockResolvedValue(makeModel());
@@ -548,7 +554,8 @@ describe("SiteDashboardPage · recommandations (EV-54)", () => {
     expect(
       await screen.findByText("Pointe prévue à 18 h : décaler la charge du four si possible."),
     ).toBeDefined();
-    expect(screen.getByText("élevée")).toBeDefined();
+    const carte = screen.getByRole("region", { name: "Recommandations" });
+    expect(within(carte).getByText("élevée")).toBeDefined();
     expect(fetchRecommendations).toHaveBeenCalledWith(
       expect.objectContaining({ siteId: "SITE-001" }),
     );
@@ -778,5 +785,42 @@ describe("SiteDashboardPage · période de l'historique (EV-53)", () => {
       ),
     ).toBe(true);
     expect(fetchReadings.mock.calls.length).toBe(avant);
+describe("SiteDashboardPage · alertes actives (EV-17)", () => {
+  it("affiche les alertes du site à côté des recommandations", async () => {
+    renderPage();
+
+    // Le titre apparaît avant la réponse : c'est le contenu qu'on attend.
+    expect(
+      await screen.findByText("Pic de consommation détecté sur le site."),
+    ).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Alertes actives", level: 2 })).toBeDefined();
+    expect(fetchAlerts).toHaveBeenCalledWith(
+      expect.objectContaining({ siteId: "SITE-001" }),
+    );
+  });
+
+  it("suit le site choisi", async () => {
+    renderPage();
+    await screen.findByText("Pic de consommation détecté sur le site.");
+
+    fireEvent.change(screen.getByLabelText("Site"), { target: { value: "SITE-002" } });
+
+    await waitFor(() => {
+      expect(fetchAlerts).toHaveBeenLastCalledWith(
+        expect.objectContaining({ siteId: "SITE-002" }),
+      );
+    });
+  });
+
+  it("garde les mesures affichées quand seules les alertes échouent", async () => {
+    fetchAlerts.mockRejectedValue(new ApiError("L'API métier est injoignable.", null));
+
+    renderPage();
+
+    expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
+    const alerts = await screen.findAllByRole("alert");
+    expect(
+      alerts.some((zone) => zone.textContent?.includes("Alertes indisponibles")),
+    ).toBe(true);
   });
 });

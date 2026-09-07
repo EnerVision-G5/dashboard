@@ -7,9 +7,10 @@
  *
  * Trois zones sous l'en-tête, comme la maquette les nomme :
  *   - Consommation temps réel, alimentée par GET /readings/latest ;
- *   - Recommandations, servies par l'API depuis EV-54 ;
- *   - Indicateurs, qui porte le graphique consommation / prédiction d'EV-16 et
- *     le sélecteur de période d'EV-53.
+ *   - Recommandations, servies par l'API depuis EV-54, et les alertes
+ *     actives d'EV-17 à côté d'elles — un conseil et un constat se lisent
+ *     ensemble mais ne se mélangent pas ;
+ *   - Indicateurs, qui porte le graphique consommation / prédiction d'EV-16.
  *
  * Une seconde rangée porte les diagnostics d'EV-52 : ingestion, écart
  * prédiction/réel, et mesures écartées avec les pannes de capteur. Une
@@ -22,6 +23,7 @@
  * rester lisible sur un téléphone en intervention.
  */
 
+import { AlertsPanel } from "../components/AlertsPanel";
 import { ConsumptionPredictionChart } from "../components/ConsumptionPredictionChart";
 import { DataQualityBanner } from "../components/DataQualityBanner";
 import { DemoDataBadge } from "../components/DemoDataBadge";
@@ -37,6 +39,7 @@ import { TimeRangePicker } from "../components/TimeRangePicker";
 import { SpikeHistoryPanel } from "../components/SpikeHistoryPanel";
 import { countMissingReadings, summarizeExclusions } from "../lib/series";
 import { DEFAULT_WINDOW_HOURS, recentWindow } from "../lib/timeWindow";
+import { useAlerts } from "../hooks/useAlerts";
 import { useDataHealth } from "../hooks/useDataHealth";
 import { useLatestReading } from "../hooks/useLatestReading";
 import { useRecommendations } from "../hooks/useRecommendations";
@@ -89,6 +92,12 @@ export function SiteDashboardPage() {
     (siteId) => sites.find((site) => site.site_id === siteId)?.site_name ?? siteId,
   );
 
+  const {
+    alerts,
+    isLoading: alertsLoading,
+    error: alertsError,
+    windowHours: alertsWindowHours,
+  } = useAlerts(selectedSite?.site_id ?? null);
   const {
     recommendations,
     isLoading: recommendationsLoading,
@@ -211,6 +220,15 @@ export function SiteDashboardPage() {
                   recommendations={recommendations}
                   isLoading={recommendationsLoading}
                   error={recommendationsError}
+                />
+              </div>
+
+              <div className="md:col-span-2 lg:col-span-6">
+                <AlertsPanel
+                  alerts={alerts}
+                  isLoading={alertsLoading}
+                  error={alertsError}
+                  windowHours={alertsWindowHours}
                 />
               </div>
 
