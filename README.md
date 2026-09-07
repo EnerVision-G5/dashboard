@@ -323,7 +323,6 @@ site affiché est le contexte de tout ce qu'on lit en dessous. Sans lui sous les
 yeux, on descend dans les alertes ou les diagnostics sans plus savoir de quel
 site ils parlent, et changer de site imposait de remonter. Attention si la mise
 en page du layout évolue : un ancêtre en `overflow` autre que `visible`
-annulerait le collage. 
 annulerait le collage.
 
 La mise en page suit la maquette « Smart Energy Optimiser » : sous la barre de
