@@ -289,6 +289,42 @@ formulaire posé là aujourd'hui promettrait une persistance que le contrat gel�
 
 ## Écran de supervision
 
+![L'écran de supervision sur données réelles](docs/images/app-dashboard-dense.png)
+
+### Densité : une liste ne fait pas grandir l'écran
+
+Les listes de cet écran ont une longueur que le dashboard ne choisit pas — les
+alertes d'un site agité, l'historique de ses pannes, les constats du bandeau.
+Sur le parc réel, sept sites produisaient vingt-trois constats et trente-trois
+alertes : l'écran atteignait **6 200 pixels de haut**, et un incident rendait
+l'interface illisible au moment précis où l'on en avait besoin.
+
+Trois règles y répondent, et un même écran fait désormais **2 550 pixels** :
+
+- **hauteur bornée et défilement** pour toute liste ouverte, via `ScrollArea`
+  (`src/ui/`). La zone est nommée et **atteignable au clavier** — sans
+  `tabIndex`, le contenu qui dépasse serait inaccessible à qui n'utilise pas la
+  souris ;
+- **le compte reste hors de la zone** : savoir qu'il y a trente-trois alertes ne
+  doit pas exiger de faire défiler ;
+- **le détail secondaire se replie**, via `Disclosure` (`<details>` natif :
+  clavier, lecteurs d'écran et Ctrl+F fonctionnent sans une ligne de
+  JavaScript). Le bandeau garde ses trois constats les plus graves visibles —
+  ils sont déjà triés — et range les autres derrière leur compte. L'état du
+  collecteur est replié, **sauf quand il échoue** : c'est alors l'information la
+  plus utile de la carte.
+
+Le graphique, lui, occupe **toute la largeur** : c'est la pièce qui a le plus
+besoin de place, et une courbe de 1 440 points dans une demi-grille ne se lit
+pas.
+
+L'**en-tête de site est collé en haut** (`sticky`) : l'écran reste long, et le
+site affiché est le contexte de tout ce qu'on lit en dessous. Sans lui sous les
+yeux, on descend dans les alertes ou les diagnostics sans plus savoir de quel
+site ils parlent, et changer de site imposait de remonter. Attention si la mise
+en page du layout évolue : un ancêtre en `overflow` autre que `visible`
+annulerait le collage.
+
 La mise en page suit la maquette « Smart Energy Optimiser » : sous la barre de
 navigation, un en-tête portant le sélecteur de site et — à droite — la puissance
 souscrite et la localisation du site choisi, puis trois zones.

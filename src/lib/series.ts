@@ -119,6 +119,62 @@ export function countMissingReadings(points: readonly ChartPoint[]): number {
   return points.filter((point) => point.dataQuality !== null && point.actualKw === null).length;
 }
 
+/**
+ * Marge laissée au-dessus et au-dessous des valeurs, en part de leur amplitude.
+ *
+ * Sans elle, la courbe touche les bords du cadre et les extremums se
+ * confondent avec l'axe.
+ */
+const VALUE_MARGIN_RATIO = 0.15;
+
+/**
+ * Bornes verticales calculées sur les valeurs réellement tracées.
+ *
+ * Recharts part de zéro par défaut. Sur un site dont la consommation oscille
+ * entre 140 et 200 kW, les quatre cinquièmes du cadre servent alors à montrer
+ * un vide, et les variations — c'est-à-dire l'information — s'aplatissent en
+ * une ligne droite.
+ *
+ * Le compromis est connu : **un axe qui ne part pas de zéro amplifie
+ * visuellement les écarts**. C'est le bon choix pour de la supervision, où l'on
+ * cherche la variation et non la proportion, et l'axe reste gradué en
+ * kilowatts, donc lisible sans être deviné.
+ *
+ * Rendre `auto` plutôt qu'un couple de nombres quand rien n'est tracé : une
+ * fenêtre sans mesure ne doit pas produire un domaine inventé.
+ */
+export function valueDomain(
+  points: readonly ChartPoint[],
+): [number, number] | ["auto", "auto"] {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+
+  // Une boucle plutôt qu'un spread dans `Math.min` : une fenêtre profonde peut
+  // porter des dizaines de milliers de points, au-delà de ce qu'un appel de
+  // fonction accepte d'arguments.
+  for (const point of points) {
+    for (const valeur of [point.actualKw, point.predictedKw]) {
+      if (valeur === null) {
+        continue;
+      }
+      min = Math.min(min, valeur);
+      max = Math.max(max, valeur);
+    }
+  }
+
+  if (min === Number.POSITIVE_INFINITY) {
+    return ["auto", "auto"];
+  }
+  // Série plate : une amplitude nulle donnerait un domaine dégénéré, que
+  // Recharts rend par un axe sans graduation.
+  if (min === max) {
+    return [Math.floor(min - 1), Math.ceil(max + 1)];
+  }
+
+  const marge = (max - min) * VALUE_MARGIN_RATIO;
+  return [Math.floor(min - marge), Math.ceil(max + marge)];
+}
+
 /** Répartition des mesures d'une fenêtre par qualification de la source. */
 export interface QualityCount {
   /** Qualification telle que le contrat l'énumère. */

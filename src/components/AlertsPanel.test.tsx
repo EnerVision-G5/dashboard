@@ -103,3 +103,27 @@ describe("AlertsPanel", () => {
     expect(items[1]).toContain("Bénigne");
   });
 });
+
+describe("AlertsPanel · densité (EV-56)", () => {
+  it("borne la hauteur de la liste et la laisse défiler", () => {
+    renderPanel({
+      alerts: Array.from({ length: 30 }, (_, index) =>
+        makeAlert({ alert_id: `AL-${index}` }),
+      ),
+    });
+
+    // Un site agité faisait grandir la carte jusqu'à repousser tout l'écran.
+    const zone = screen.getByRole("region", { name: "Liste des alertes" });
+    expect(zone.className).toContain("overflow-y-auto");
+    expect(zone.querySelectorAll("li")).toHaveLength(30);
+  });
+
+  it("annonce le compte hors de la zone défilante", () => {
+    renderPanel({
+      alerts: [makeAlert({ alert_id: "1" }), makeAlert({ alert_id: "2" })],
+    });
+
+    // Savoir combien d'alertes attendent ne doit pas exiger de faire défiler.
+    expect(screen.getByText("2 alerte(s), les plus graves d'abord.")).toBeDefined();
+  });
+});

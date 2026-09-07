@@ -5,6 +5,7 @@ import {
   countByQuality,
   countMissingReadings,
   summarizeExclusions,
+  valueDomain,
 } from "./series";
 import { makePredictionPoint, makeReading } from "../test/doubles";
 
@@ -243,5 +244,58 @@ describe("countByQuality", () => {
 
   it("rend des catégories vides sur une série vide", () => {
     expect(countByQuality([])).toHaveLength(4);
+  });
+});
+
+describe("valueDomain", () => {
+  function serie(valeurs: (number | null)[]) {
+    return buildChartSeries(
+      valeurs.map((valeur, index) =>
+        makeReading({
+          timestamp: new Date(Date.UTC(2026, 8, 2, 0, index)).toISOString(),
+          consumption_kw: valeur,
+        }),
+      ),
+      [],
+    );
+  }
+
+  it("cadre les bornes sur les valeurs, sans partir de zéro", () => {
+    // Recharts part de zéro par défaut : sur un site oscillant entre 140 et
+    // 200 kW, les quatre cinquièmes du cadre montraient un vide.
+    const [min, max] = valueDomain(serie([140, 200])) as [number, number];
+
+    expect(min).toBeGreaterThan(100);
+    expect(min).toBeLessThan(140);
+    expect(max).toBeGreaterThan(200);
+  });
+
+  it("laisse une marge de 15 % de l'amplitude", () => {
+    const [min, max] = valueDomain(serie([100, 200])) as [number, number];
+
+    // Amplitude de 100, donc 15 de marge de chaque côté.
+    expect(min).toBe(85);
+    expect(max).toBe(215);
+  });
+
+  it("tient compte de la prédiction, pas seulement des mesures", () => {
+    const points = buildChartSeries(
+      [makeReading({ consumption_kw: 150 })],
+      [makePredictionPoint({ timestamp: "2026-09-02T01:00:00Z", predicted_consumption_kw: 400 })],
+    );
+
+    const [, max] = valueDomain(points) as [number, number];
+    expect(max).toBeGreaterThan(400);
+  });
+
+  it("écarte les bornes d'une série plate, qui n'a aucune amplitude", () => {
+    // Un domaine dégénéré donnerait un axe sans graduation.
+    expect(valueDomain(serie([160, 160]))).toEqual([159, 161]);
+  });
+
+  it("laisse Recharts décider quand rien n'est tracé", () => {
+    // Une fenêtre sans mesure ne doit pas produire un domaine inventé.
+    expect(valueDomain(serie([null, null]))).toEqual(["auto", "auto"]);
+    expect(valueDomain([])).toEqual(["auto", "auto"]);
   });
 });

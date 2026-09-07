@@ -20,7 +20,7 @@
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { Button } from "../ui/Button";
-import { CONFIG_PATH, DASHBOARD_PATH } from "../routes/paths";
+import { CONFIG_PATH, DASHBOARD_PATH, DIAGNOSTIC_PATH } from "../routes/paths";
 
 /** Entrée de la navigation principale. */
 interface NavEntry {
@@ -45,6 +45,7 @@ interface NavEntry {
  */
 const NAV_ENTRIES: NavEntry[] = [
   { label: "Dashboard", path: DASHBOARD_PATH, exact: true },
+  { label: "Diagnostic", path: DIAGNOSTIC_PATH },
   { label: "Configuration", path: CONFIG_PATH },
 ];
 

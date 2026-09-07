@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import {
   ACTUAL_SERIES_LABEL,
+  BRIDGE_SERIES_LABEL,
   ConsumptionPredictionChart,
   PREDICTED_SERIES_LABEL,
 } from "./ConsumptionPredictionChart";
@@ -33,7 +34,9 @@ describe("ConsumptionPredictionChart", () => {
 
     expect(screen.getByText(ACTUAL_SERIES_LABEL)).toBeDefined();
     expect(screen.getByText(PREDICTED_SERIES_LABEL)).toBeDefined();
-    expect(container.querySelectorAll(".recharts-line-curve").length).toBe(2);
+    // Trois traits depuis le pontage des trous : mesuré, joint, prédit.
+    expect(screen.getByText(BRIDGE_SERIES_LABEL)).toBeDefined();
+    expect(container.querySelectorAll(".recharts-line-curve").length).toBe(3);
   });
 
   it("distingue la prédiction par un tracé en pointillés", () => {
@@ -41,9 +44,12 @@ describe("ConsumptionPredictionChart", () => {
       <ConsumptionPredictionChart points={POINTS} description="Graphique de test" />,
     );
 
-    const curves = [...container.querySelectorAll(".recharts-line-curve")];
-    const dashed = curves.filter((curve) => curve.getAttribute("stroke-dasharray") !== null);
-    expect(dashed).toHaveLength(1);
+    // Le pontage est aussi en pointillé : on vise donc la série nommée,
+    // plutôt que "la seule courbe pointillée du graphique".
+    const predite = container.querySelector(".serie-predite .recharts-line-curve");
+    expect(predite?.getAttribute("stroke-dasharray")).toBe("6 4");
+    const mesuree = container.querySelector(".serie-mesuree .recharts-line-curve");
+    expect(mesuree?.getAttribute("stroke-dasharray")).toBeNull();
   });
 
   it("porte une description accessible", () => {
@@ -59,10 +65,37 @@ describe("ConsumptionPredictionChart", () => {
       <ConsumptionPredictionChart points={POINTS} description="Graphique de test" />,
     );
 
-    const actualCurve = container.querySelector(".recharts-line-curve");
+    const actualCurve = container.querySelector(".serie-mesuree .recharts-line-curve");
     // Un trou se traduit par une reprise de tracé (« M ») en milieu de chemin ;
     // une courbe comblée n'en contiendrait qu'une, au départ.
     const path = actualCurve?.getAttribute("d") ?? "";
     expect((path.match(/M/g) ?? []).length).toBeGreaterThan(1);
   });
+});
+
+describe("ConsumptionPredictionChart · pontage des trous", () => {
+  it("relie la dernière valeur connue à la suivante", () => {
+    const { container } = render(
+      <ConsumptionPredictionChart points={POINTS} description="Graphique de test" />,
+    );
+
+    // Un seul « M » : le tracé ne s'interrompt pas, il traverse le trou.
+    const pontage = container.querySelector(".serie-pontage .recharts-line-curve");
+    const chemin = pontage?.getAttribute("d") ?? "";
+    expect((chemin.match(/M/g) ?? []).length).toBe(1);
+  });
+
+  it("se distingue de la mesure par un trait fin et atténué", () => {
+    const { container } = render(
+      <ConsumptionPredictionChart points={POINTS} description="Graphique de test" />,
+    );
+
+    // La forme porte la différence : combler avec le trait plein de la mesure
+    // aurait affirmé une continuité que personne n'a relevée.
+    const pontage = container.querySelector(".serie-pontage .recharts-line-curve");
+    expect(pontage?.getAttribute("stroke-dasharray")).toBe("2 4");
+    expect(pontage?.getAttribute("stroke-width")).toBe("1");
+    expect(pontage?.getAttribute("stroke-opacity")).toBe("0.45");
+  });
+
 });

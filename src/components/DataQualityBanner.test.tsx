@@ -142,3 +142,64 @@ describe("DataQualityBanner", () => {
     );
   });
 });
+
+describe("DataQualityBanner · densité (EV-56)", () => {
+  /** Un parc de sept sites, dont chacun produit plusieurs constats. */
+  function parcAgite() {
+    return buildDataHealth({
+      indicators: Array.from({ length: 7 }, (_, index) =>
+        makeSiteIndicators({
+          site_id: `SITE-00${index + 1}`,
+          quality: {
+            ...makeSiteIndicators().quality,
+            qualified: 0,
+            qualified_ratio: 0,
+            degraded_ratio: 0.99,
+            exceeds_threshold: true,
+            sensor_failure: 28,
+          },
+        }),
+      ),
+      sensors: [],
+    });
+  }
+
+  it("n'affiche d'emblée que les trois constats les plus graves", () => {
+    renderBanner({ health: parcAgite() });
+
+    // Vingt et un constats occupaient la moitié de l'écran et repoussaient
+    // hors de vue les panneaux que le bandeau est censé qualifier.
+    const visibles = screen
+      .getByRole("region", { name: "Fraîcheur et qualité des données" })
+      .querySelectorAll("ul > li");
+    expect(visibles.length).toBeGreaterThan(0);
+    expect(screen.getByText(/18 autre\(s\) constat\(s\) sur 7 site\(s\)/)).toBeDefined();
+  });
+
+  it("garde les autres constats accessibles, repliés et défilants", () => {
+    renderBanner({ health: parcAgite() });
+
+    const detail = screen.getByRole("group");
+    expect(detail.hasAttribute("open")).toBe(false);
+    // Repliés mais présents : rien n'est perdu, seulement rangé.
+    expect(
+      screen.getByRole("region", { name: "Détail des constats de qualité" }),
+    ).toBeDefined();
+  });
+
+  it("ne replie rien quand les constats tiennent à l'écran", () => {
+    renderBanner({
+      health: buildDataHealth({
+        indicators: [
+          makeSiteIndicators({
+            quality: { ...makeSiteIndicators().quality, sensor_failure: 3 },
+          }),
+        ],
+        sensors: [],
+      }),
+    });
+
+    expect(screen.queryByRole("group")).toBeNull();
+    expect(screen.queryByText(/autre\(s\) constat/)).toBeNull();
+  });
+});

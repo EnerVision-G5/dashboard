@@ -21,6 +21,7 @@
 import type { CollectorState, IngestionIndicator } from "../api/indicators";
 import { formatAge } from "../lib/dataHealth";
 import { Card } from "../ui/Card";
+import { Disclosure } from "../ui/Disclosure";
 import { EmptyState, ErrorState, LoadingState } from "../ui/states";
 
 interface IngestionPanelProps {
@@ -61,10 +62,15 @@ function Collector({ collector }: { collector: CollectorState }) {
 
   return (
     <div className="mt-4">
-      <h3 className="text-annexe font-medium tracking-wide text-ardoise-600 uppercase">
-        Collecteur ({collector.source === "poller" ? "collecte continue" : "reprise"})
-      </h3>
-      <dl className="mt-2 text-corps">
+      {/* Replié par défaut : on vient y chercher une cause, et le reste du
+          temps ces six lignes repoussent les panneaux voisins vers le bas.
+          Ouvert d'emblée quand le collecteur échoue, puisque c'est alors
+          l'information la plus utile de la carte. */}
+      <Disclosure
+        summary={`Collecteur (${collector.source === "poller" ? "collecte continue" : "reprise"})`}
+        defaultOpen={enPanne}
+      >
+      <dl className="text-corps">
         <Line label="Dernier essai">
           <Moment iso={collector.last_attempt_at} />
         </Line>
@@ -93,6 +99,7 @@ function Collector({ collector }: { collector: CollectorState }) {
           {collector.last_error}
         </p>
       )}
+      </Disclosure>
     </div>
   );
 }
