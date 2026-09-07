@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -171,6 +172,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Démonter avant de remettre les compteurs à zéro : les hooks d'après-test
+  // s'exécutent en pile, celui de src/test/setup.ts après celui-ci. Un effet
+  // de la page précédente, déclenché par une promesse encore en vol, compterait
+  // sinon dans le test suivant.
+  cleanup();
   vi.unstubAllEnvs();
   vi.clearAllMocks();
 });
