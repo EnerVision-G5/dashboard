@@ -233,7 +233,10 @@ export function SiteDashboardPage() {
                 />
               </div>
 
-              <div className="md:col-span-2 lg:col-span-6">
+              {/* Le graphique occupe toute la largeur : c'est la pièce qui a
+                  le plus besoin de place, et une courbe de 1 440 points dans
+                  une demi-grille ne se lit pas. */}
+              <div className="md:col-span-2 lg:col-span-12">
                 <Card
                   title="Indicateurs"
                   description={`Consommation et prédiction sur ${windowHours} h`}

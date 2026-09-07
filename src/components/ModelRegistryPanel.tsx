@@ -19,6 +19,7 @@
 
 import type { Model } from "../api/models";
 import { Card } from "../ui/Card";
+import { ScrollArea } from "../ui/ScrollArea";
 import { EmptyState, ErrorState, LoadingState } from "../ui/states";
 
 interface ModelRegistryPanelProps {
@@ -107,7 +108,8 @@ export function ModelRegistryPanel({
               <h3 className="text-annexe font-medium tracking-wide text-ardoise-600 uppercase">
                 Versions précédentes
               </h3>
-              <ul className="mt-1 text-corps">
+              <ScrollArea label="Versions précédentes du modèle" height="courte">
+              <ul className="mt-1 text-corps pr-2">
                 {others.map((model) => (
                   <li
                     key={model.modele_id}
@@ -122,6 +124,7 @@ export function ModelRegistryPanel({
                   </li>
                 ))}
               </ul>
+              </ScrollArea>
             </div>
           )}
 

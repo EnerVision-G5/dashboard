@@ -19,7 +19,9 @@
  * et le détail est une liste de phrases complètes.
  */
 
-import type { DataHealth, HealthLevel } from "../lib/dataHealth";
+import type { DataHealth, HealthFinding, HealthLevel } from "../lib/dataHealth";
+import { Disclosure } from "../ui/Disclosure";
+import { ScrollArea } from "../ui/ScrollArea";
 
 interface DataQualityBannerProps {
   health: DataHealth | null;
@@ -57,6 +59,22 @@ const LEVELS: Record<
     role: "alert",
   },
 };
+
+/**
+ * Nombre de constats affichés d'emblée.
+ *
+ * Sur sept sites, trois constats par site font vingt et un messages : le
+ * bandeau occupait alors la moitié de l'écran et repoussait hors de vue les
+ * panneaux qu'il est censé qualifier. Les plus graves restent visibles — ils
+ * sont peu nombreux et c'est pour eux qu'on lit le bandeau — le reste est
+ * replié derrière un compte.
+ */
+const APERCU = 3;
+
+/** Une ligne de constat. */
+function Finding({ finding }: { finding: HealthFinding }) {
+  return <li>{finding.message}</li>;
+}
 
 /** Heure du dernier calcul, telle que l'API la sert. */
 function CheckedAt({ generatedAt }: { generatedAt: string | null }) {
@@ -128,13 +146,38 @@ export function DataQualityBanner({
       </p>
 
       {health.findings.length > 0 && (
-        <ul className="mt-2 flex flex-col gap-1 text-corps">
-          {health.findings.map((finding) => (
-            <li key={`${finding.siteId}-${finding.kind}-${finding.message}`}>
-              {finding.message}
-            </li>
-          ))}
-        </ul>
+        <div className="mt-2 flex flex-col gap-2 text-corps">
+          {/* Les constats les plus graves sont déjà en tête de liste : les
+              trois premiers sont donc ceux qu'il faut lire. */}
+          <ul className="flex flex-col gap-1">
+            {health.findings.slice(0, APERCU).map((finding) => (
+              <Finding
+                key={`${finding.siteId}-${finding.kind}-${finding.message}`}
+                finding={finding}
+              />
+            ))}
+          </ul>
+
+          {health.findings.length > APERCU && (
+            <Disclosure
+              summary={`${health.findings.length - APERCU} autre(s) constat(s) sur ${health.sitesChecked} site(s)`}
+            >
+              <ScrollArea
+                label="Détail des constats de qualité"
+                height="courte"
+              >
+                <ul className="flex flex-col gap-1 pr-2">
+                  {health.findings.slice(APERCU).map((finding) => (
+                    <Finding
+                      key={`${finding.siteId}-${finding.kind}-${finding.message}`}
+                      finding={finding}
+                    />
+                  ))}
+                </ul>
+              </ScrollArea>
+            </Disclosure>
+          )}
+        </div>
       )}
 
       {/* Un seul flux en échec : ce qui a été lu reste affiché, et ce qui
