@@ -680,6 +680,111 @@ describe("SiteDashboardPage · commandes et historiques", () => {
   });
 });
 
+describe("SiteDashboardPage · période de l'historique (EV-53)", () => {
+  it("interroge les 24 dernières heures à l'ouverture", async () => {
+    renderPage();
+
+    await screen.findByText("Consommation réelle (kW)");
+    const { startTime, endTime } = fetchReadings.mock.calls[0][0];
+    const heures = (Date.parse(endTime) - Date.parse(startTime)) / 3_600_000;
+    expect(Math.round(heures)).toBe(24);
+  });
+
+  it("relit les mesures sur la durée rapide choisie", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "6 h" }));
+    });
+
+    await waitFor(() => {
+      const dernier = fetchReadings.mock.calls.at(-1)?.[0];
+      const heures =
+        (Date.parse(dernier.endTime) - Date.parse(dernier.startTime)) / 3_600_000;
+      expect(Math.round(heures)).toBe(6);
+    });
+  });
+
+  it("relit les mesures sur les bornes saisies", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+
+    const debut = new Date("2026-09-01T08:00:00Z");
+    const fin = new Date("2026-09-01T20:00:00Z");
+    const local = (moment: Date) =>
+      new Date(moment.getTime() - moment.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+
+    fireEvent.change(screen.getByLabelText("Début"), { target: { value: local(debut) } });
+    fireEvent.change(screen.getByLabelText("Fin"), { target: { value: local(fin) } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Appliquer" }));
+    });
+
+    await waitFor(() => {
+      expect(fetchReadings).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          startTime: debut.toISOString(),
+          endTime: fin.toISOString(),
+        }),
+      );
+    });
+  });
+
+  it("ne prolonge pas la fenêtre des prédictions sur une période passée", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+
+    const debut = new Date("2026-09-01T08:00:00Z");
+    const fin = new Date("2026-09-01T20:00:00Z");
+    const local = (moment: Date) =>
+      new Date(moment.getTime() - moment.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+
+    fireEvent.change(screen.getByLabelText("Début"), { target: { value: local(debut) } });
+    fireEvent.change(screen.getByLabelText("Fin"), { target: { value: local(fin) } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Appliquer" }));
+    });
+
+    // Période entièrement passée : les prédictions utiles sont celles
+    // archivées pendant cette période, pas les 24 h qui la suivent.
+    await waitFor(() => {
+      expect(fetchPredictions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ endTime: fin.toISOString() }),
+      );
+    });
+  });
+
+  it("refuse une période inversée sans appeler l'API", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+    const avant = fetchReadings.mock.calls.length;
+
+    const local = (iso: string) => {
+      const moment = new Date(iso);
+      return new Date(moment.getTime() - moment.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+    };
+    fireEvent.change(screen.getByLabelText("Début"), {
+      target: { value: local("2026-09-02T20:00:00Z") },
+    });
+    fireEvent.change(screen.getByLabelText("Fin"), {
+      target: { value: local("2026-09-02T08:00:00Z") },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Appliquer" }));
+
+    const alerts = await screen.findAllByRole("alert");
+    expect(
+      alerts.some((zone) =>
+        zone.textContent?.includes("La date de fin doit suivre la date de début."),
+      ),
+    ).toBe(true);
+    expect(fetchReadings.mock.calls.length).toBe(avant);
 describe("SiteDashboardPage · alertes actives (EV-17)", () => {
   it("affiche les alertes du site à côté des recommandations", async () => {
     renderPage();

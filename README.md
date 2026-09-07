@@ -586,6 +586,35 @@ Au chargement, le premier site dont le `status` vaut `active` est présélection
 les deux flux ; la requête précédente est annulée (`AbortController`), et les
 données ne sont affichées que si elles proviennent bien du site demandé.
 
+### Période de l'historique
+
+**EV-53** permet de choisir la période affichée, de deux façons parce qu'elles
+répondent à deux besoins : des **durées rapides** (6 h, 24 h, 3 j, 7 j) pour le
+cas courant, recalculées à chaque clic pour finir à l'instant présent, et des
+**bornes explicites** pour l'analyse d'un incident daté.
+
+La saisie est validée **avant** l'appel : le contrat refuse des bornes
+inversées par un 422, et traduire ce refus après coup serait moins clair que de
+l'empêcher — l'utilisateur sait ce qu'il a écrit, pas ce que l'API en pense. Une
+période de durée nulle est refusée aussi : elle ne rendrait qu'un point.
+
+Deux conséquences que l'écran assume :
+
+- **le format de l'axe suit la profondeur.** Sur 7 jours, une graduation
+  « 14:30 » désignerait cinq jours différents : au-delà de 48 heures, l'axe
+  affiche le jour avec l'heure ;
+- **la fenêtre des prédictions n'est pas celle des mesures.** Quand la période
+  touche le présent, elle est prolongée de son horizon — sinon on ne verrait
+  jamais la prévision à venir. Quand la période est entièrement passée, elle
+  reste identique : les prédictions utiles sont celles archivées pendant cette
+  période, et prolonger ramènerait des heures que l'écran ne montre pas.
+
+> **Au-delà de 13 jours, un avertissement.** La pagination des mesures est
+> bornée à 20 pages de 1 000 éléments, soit environ 13 jours à une mesure par
+> minute. Une période plus profonde est **acceptée mais signalée** : la série
+> serait tronquée sans que rien ne le dise, et un graphique incomplet lu comme
+> un graphique entier est pire qu'un graphique refusé.
+
 ### Pagination des mesures
 
 `GET /readings` plafonne une page à 1 000 éléments. À une mesure par minute,
