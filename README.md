@@ -70,10 +70,32 @@ npm ci
 | `npm run build`     | Vérification TypeScript puis build de production   |
 | `npm run gen:types` | Régénère `src/types` depuis les contrats OpenAPI   |
 
-La CI (`.github/workflows/ci.yml`) enchaîne `npm ci`, `npm run lint`,
-`npm test` et `npm run build` à chaque push et sur chaque pull request. Le job
-de tests appelle `npm test` sans `--if-present` : une suite absente fait
-désormais échouer la CI au lieu de la laisser verte à tort.
+### Intégration et livraison continues
+
+`ci.yml` tourne sur chaque pull request et sur `develop` après fusion. Le job
+`lint-test-build` (`npm ci`, `npm run lint`, `npm test` sans `--if-present`,
+`npm run build`) passe d'abord ; les deux scans attendent son vert et portent
+sur une image construite pour l'occasion, pas sur celle qui sera livrée :
+
+| Job | Vérifie | Bloquant |
+| --- | --- | --- |
+| `lint-test-build` | ESLint, Vitest, TypeScript et build Vite | oui |
+| `sca-grype` | aucune CVE High/Critical **corrigeable** dans l'image | oui |
+| `dast-zap` | aucune alerte ZAP sur le dashboard servi par Nginx, hors `.zap/rules.tsv` | oui |
+
+`cd.yml` tourne sur chaque push sur `master` et à la demande (*Actions → cd →
+Run workflow*). Il rejoue `lint-test-build`, puis construit l'image **une
+seule fois**, sans la publier, et enchaîne sur cette image exacte : Grype, ZAP,
+smoke test (`/healthz` et la page d'accueil). Le `docker push` des tags
+`sha-<git-sha>` et `latest` vient en dernier : aucun tag n'apparaît sur GHCR
+tant qu'un contrôle a échoué, et le résumé du run le dit. Le `GITHUB_TOKEN`
+n'a que `contents: read`, sauf ce job de publication qui ajoute
+`packages: write`.
+
+Une alerte de scan se corrige, ou s'inscrit comme exception justifiée dans
+`.zap/rules.tsv` (ZAP) ou un fichier `.grype.yaml` (Grype, aucun à ce jour).
+Actions et images tierces sont épinglées sur un commit ou un digest, la
+version lisible en commentaire.
 
 ## Configuration
 
