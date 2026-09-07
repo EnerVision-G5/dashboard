@@ -8,8 +8,12 @@
  */
 
 import type { AxiosInstance } from "axios";
+import type { Alert } from "../api/alerts";
 import type { SiteIndicators } from "../api/indicators";
-import type { SensorHealth } from "../api/sensors";
+import type { Model } from "../api/models";
+import type { Recommendation, Recommendations } from "../api/recommendations";
+import type { SpikeSimulation } from "../api/simulations";
+import type { SensorFailure, SensorHealth } from "../api/sensors";
 import type { EnergyReading } from "../api/readings";
 import type {
   Prediction,
@@ -52,7 +56,11 @@ export function createFakeClient(respond: Responder): FakeClient {
   const instance = {
     get: (url: string, config?: { params?: Record<string, unknown> }) =>
       handle({ method: "get", url, params: config?.params }),
-    post: (url: string, body?: unknown) => handle({ method: "post", url, body }),
+    // Le troisième argument d'Axios porte la configuration : les routes de
+    // commande du contrat (pic simulé) passent leurs paramètres par la
+    // requête et non par un corps, il faut donc les enregistrer aussi.
+    post: (url: string, body?: unknown, config?: { params?: Record<string, unknown> }) =>
+      handle({ method: "post", url, body, params: config?.params }),
   } as unknown as AxiosInstance;
 
   return { instance, calls };
@@ -190,6 +198,105 @@ export function makeSensorHealth(
     overall: "ok",
     releve_le: "2026-09-02T11:59:00Z",
     failing_until: null,
+    ...overrides,
+  };
+}
+
+/** Action proposée par l'API, conforme à `RecommendationOut`. */
+export function makeRecommendation(
+  overrides: Partial<Recommendation> = {},
+): Recommendation {
+  return {
+    type: "predicted_peak",
+    severity: "high",
+    message: "Pointe prévue à 18 h : décaler la charge du four si possible.",
+    value_kw: 480,
+    at: "2026-09-02T18:00:00Z",
+    window_start: null,
+    window_end: null,
+    ...overrides,
+  };
+}
+
+/**
+ * Jeu de recommandations, tel que le contrat le renvoie.
+ *
+ * `detail` reste nul par défaut : le contrat ne le sert que pour expliquer une
+ * liste vide, et le double part d'une liste garnie.
+ */
+export function makeRecommendations(
+  overrides: Partial<Recommendations> = {},
+): Recommendations {
+  return {
+    site_id: "SITE-001",
+    generated_at: "2026-09-02T12:00:00Z",
+    horizon_hours: 24,
+    model_version: "enervision_xgboost:3",
+    detail: null,
+    items: [makeRecommendation()],
+    ...overrides,
+  };
+}
+
+/** Alerte telle que le contrat la publie. */
+export function makeAlert(overrides: Partial<Alert> = {}): Alert {
+  return {
+    alert_id: "AL-001",
+    site_id: "SITE-001",
+    timestamp: "2026-09-02T12:00:00Z",
+    severity: "high",
+    type: "spike",
+    message: "Pic de consommation détecté sur le site.",
+    value: 812,
+    threshold: 500,
+    ...overrides,
+  };
+}
+
+/** Modèle du registre, tel que le contrat le publie. */
+export function makeModel(overrides: Partial<Model> = {}): Model {
+  return {
+    modele_id: 3,
+    nom: "enervision_xgboost",
+    version: "3",
+    actif: true,
+    date_entrainement: "2026-08-30T02:00:00Z",
+    created_at: "2026-08-30T02:05:00Z",
+    mlflow_run_id: "9f2c1ab4d5e6789012345678abcdef01",
+    ...overrides,
+  };
+}
+
+/** Pic simulé, tel que l'API l'archive. */
+export function makeSpikeSimulation(
+  overrides: Partial<SpikeSimulation> = {},
+): SpikeSimulation {
+  return {
+    simulation_id: 1,
+    site_id: "SITE-001",
+    duration_minutes: 30,
+    statut: "accepted",
+    evenement: "spike",
+    message: null,
+    declenche_par: "dev.writer",
+    declenche_le: "2026-09-04T12:00:00Z",
+    consumption_kw_constatee: 812,
+    data_quality_constatee: "good",
+    ...overrides,
+  };
+}
+
+/** Épisode de panne de capteur, tel que l'API le borne. */
+export function makeSensorFailure(
+  overrides: Partial<SensorFailure> = {},
+): SensorFailure {
+  return {
+    site_id: "SITE-001",
+    capteur: "temperature",
+    started_at: "2026-09-02T08:00:00Z",
+    ended_at: "2026-09-02T09:30:00Z",
+    failing_until: null,
+    ongoing: false,
     ...overrides,
   };
 }

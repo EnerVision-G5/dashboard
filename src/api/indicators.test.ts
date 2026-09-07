@@ -3,6 +3,8 @@ import {
   INDICATORS_PATH,
   INDICATORS_WINDOW_HOURS,
   fetchIndicators,
+  fetchSiteIndicators,
+  siteIndicatorsPath,
 } from "./indicators";
 import { ApiError } from "./http";
 import { createFakeClient, makeSiteIndicators } from "../test/doubles";
@@ -41,5 +43,38 @@ describe("fetchIndicators", () => {
     await expect(fetchIndicators({ client: instance })).rejects.toThrow(
       "L'API métier est injoignable.",
     );
+  });
+});
+
+describe("fetchSiteIndicators", () => {
+  it("interroge la route dédiée au site, avec la fenêtre", async () => {
+    const indicators = makeSiteIndicators();
+    const { instance, calls } = createFakeClient(() => indicators);
+
+    const read = await fetchSiteIndicators({ client: instance, siteId: "SITE-001" });
+
+    expect(siteIndicatorsPath("SITE-001")).toBe("/api/v1/sites/SITE-001/indicators");
+    expect(calls).toEqual([
+      {
+        method: "get",
+        url: "/api/v1/sites/SITE-001/indicators",
+        params: { window_hours: INDICATORS_WINDOW_HOURS },
+      },
+    ]);
+    expect(read).toEqual(indicators);
+  });
+
+  it("encode un identifiant de site exotique", () => {
+    expect(siteIndicatorsPath("site/001")).toBe("/api/v1/sites/site%2F001/indicators");
+  });
+
+  it("remonte le 404 du contrat sur un site inconnu", async () => {
+    const { instance } = createFakeClient(() => {
+      throw new ApiError("Site inconnu de l'API métier (404).", 404);
+    });
+
+    await expect(
+      fetchSiteIndicators({ client: instance, siteId: "SITE-404" }),
+    ).rejects.toThrow("Site inconnu de l'API métier (404).");
   });
 });

@@ -1,13 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { SiteDashboardPage } from "./SiteDashboardPage";
 import { ApiError } from "../api/http";
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthContextValue } from "../auth/AuthContext";
 import {
+  makeAlert,
+  makeModel,
   makePrediction,
   makePredictionPoint,
   makeReading,
+  makeRecommendations,
+  makeSpikeSimulation,
+  makeSensorFailure,
   makeSensorHealth,
   makeSite,
   makeSiteIndicators,
@@ -24,10 +36,20 @@ const fetchLatestReading = vi.hoisted(() => vi.fn());
 const fetchPredictions = vi.hoisted(() => vi.fn());
 const fetchIndicators = vi.hoisted(() => vi.fn());
 const fetchSensors = vi.hoisted(() => vi.fn());
+const fetchSiteIndicators = vi.hoisted(() => vi.fn());
+const fetchSensorHistory = vi.hoisted(() => vi.fn());
+const fetchRecommendations = vi.hoisted(() => vi.fn());
+const fetchAlerts = vi.hoisted(() => vi.fn());
+const fetchSpikes = vi.hoisted(() => vi.fn());
+const triggerSpike = vi.hoisted(() => vi.fn());
+const fetchModels = vi.hoisted(() => vi.fn());
+const fetchCurrentModel = vi.hoisted(() => vi.fn());
+const syncSites = vi.hoisted(() => vi.fn());
 
 vi.mock("../api/sites", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/sites")>()),
   fetchSites,
+  syncSites,
 }));
 vi.mock("../api/readings", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/readings")>()),
@@ -45,10 +67,30 @@ vi.mock("../api/predictions", async (importOriginal) => ({
 vi.mock("../api/indicators", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/indicators")>()),
   fetchIndicators,
+  fetchSiteIndicators,
 }));
 vi.mock("../api/sensors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/sensors")>()),
   fetchSensors,
+  fetchSensorHistory,
+}));
+vi.mock("../api/alerts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/alerts")>()),
+  fetchAlerts,
+}));
+vi.mock("../api/recommendations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/recommendations")>()),
+  fetchRecommendations,
+}));
+vi.mock("../api/simulations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/simulations")>()),
+  fetchSpikes,
+  triggerSpike,
+}));
+vi.mock("../api/models", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/models")>()),
+  fetchModels,
+  fetchCurrentModel,
 }));
 
 const SITE_A = makeSite({ site_id: "SITE-001", site_name: "Usine Nantes Nord", status: "active" });
@@ -75,10 +117,12 @@ const SESSION = {
  * Monte l'écran dans un contexte d'authentification déjà ouvert : ces tests
  * portent sur la supervision, la connexion est couverte par AppRoutes.
  */
-function renderPage() {
+function renderPage({ role = "reader" as "reader" | "writer" } = {}) {
   const signOut = vi.fn();
   const value: AuthContextValue = {
-    session: SESSION,
+    // Le rôle décide de l'affichage des commandes : les deux routes qu'elles
+    // appellent sont réservées au writer par le contrat.
+    session: { ...SESSION, claims: { ...SESSION.claims, role } },
     isAuthenticated: true,
     isSigningIn: false,
     error: null,
@@ -95,7 +139,6 @@ function renderPage() {
 
 beforeEach(() => {
   vi.stubEnv("VITE_API_BASE_URL", "http://api.test");
-  vi.stubEnv("VITE_PREDICT_BASE_URL", "http://predict.test");
   fetchSites.mockResolvedValue([SITE_A, SITE_B]);
   fetchReadings.mockResolvedValue(readingsOf("SITE-001", 100));
   fetchLatestReading.mockResolvedValue(
@@ -116,6 +159,15 @@ beforeEach(() => {
     makeSiteIndicators({ site_id: "SITE-002" }),
   ]);
   fetchSensors.mockResolvedValue([makeSensorHealth()]);
+  fetchSiteIndicators.mockResolvedValue(makeSiteIndicators({ site_id: "SITE-001" }));
+  fetchSensorHistory.mockResolvedValue([]);
+  fetchRecommendations.mockResolvedValue(makeRecommendations({ site_id: "SITE-001" }));
+  fetchAlerts.mockResolvedValue([makeAlert()]);
+  fetchSpikes.mockResolvedValue([]);
+  fetchModels.mockResolvedValue([makeModel()]);
+  fetchCurrentModel.mockResolvedValue(makeModel());
+  triggerSpike.mockResolvedValue(makeSpikeSimulation());
+  syncSites.mockResolvedValue({ received: 7, synchronized: 7, sites: [] });
 });
 
 afterEach(() => {
@@ -165,7 +217,11 @@ describe("SiteDashboardPage", () => {
     // plus aucune trace du graphique précédent.
     await screen.findByRole("heading", { name: "Entrepôt Rezé", level: 2 });
     await waitFor(() => {
-      expect(screen.getByRole("status").textContent).toContain("Entrepôt Rezé");
+      // Depuis EV-52, plusieurs zones de l'écran annoncent leur propre
+      // chargement — chacune la sienne, ce qui est le comportement voulu. On
+      // cherche donc celle qui parle du site, pas l'unique.
+      const chargements = screen.getAllByRole("status").map((zone) => zone.textContent);
+      expect(chargements.some((texte) => texte?.includes("Entrepôt Rezé"))).toBe(true);
     });
     expect(screen.queryByText("Consommation réelle (kW)")).toBeNull();
 
@@ -402,5 +458,386 @@ describe("SiteDashboardPage · bandeau de fraîcheur et de qualité (EV-18)", ()
         expect.anything(),
       );
     });
+  });
+});
+
+describe("SiteDashboardPage · diagnostics du site (EV-52)", () => {
+  it("affiche les trois panneaux de diagnostic sous la maquette", async () => {
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { name: "Ingestion des mesures", level: 2 }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("heading", { name: "Écart prédiction / réel", level: 2 }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("heading", {
+        name: "Mesures écartées et pannes de capteur",
+        level: 2,
+      }),
+    ).toBeDefined();
+  });
+
+  it("passe au panneau temps réel le seuil de retard de l'API", async () => {
+    // Mesure vieille de trois minutes, seuil de l'API à cinq : le panneau ne
+    // doit pas annoncer de retard, alors que son seuil interne de deux minutes
+    // l'aurait fait.
+    fetchLatestReading.mockResolvedValue(
+      makeReading({ site_id: "SITE-001", timestamp: new Date(Date.now() - 180_000).toISOString() }),
+    );
+
+    renderPage();
+
+    await screen.findByRole("heading", { name: "Ingestion des mesures", level: 2 });
+    expect(screen.queryByText(/l'ingestion est en retard/)).toBeNull();
+  });
+
+  it("résume les mesures écartées de la fenêtre affichée", async () => {
+    fetchReadings.mockResolvedValue([
+      makeReading({ site_id: "SITE-001", timestamp: "2026-09-02T00:00:00Z" }),
+      makeReading({
+        site_id: "SITE-001",
+        timestamp: "2026-09-02T00:01:00Z",
+        excluded: true,
+        exclusion_reason: "temperature_sensor_failure",
+      }),
+    ]);
+
+    renderPage();
+
+    // Le graphique de qualité d'EV-19 affiche aussi des chiffres seuls : on
+    // compte le total dans le panneau qui en parle.
+    expect(
+      await screen.findByText("1 × temperature_sensor_failure"),
+    ).toBeDefined();
+    const panneau = screen.getByRole("region", {
+      name: "Mesures écartées et pannes de capteur",
+    });
+    expect(within(panneau).getByText("1")).toBeDefined();
+  });
+
+  it("affiche l'historique des pannes du site affiché", async () => {
+    fetchSensorHistory.mockResolvedValue([
+      makeSensorFailure({ capteur: "network", ended_at: null, ongoing: true }),
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText("Capteur réseau")).toBeDefined();
+    expect(screen.getByText(/panne en cours/)).toBeDefined();
+  });
+
+  it("suit le site choisi pour ses diagnostics", async () => {
+    renderPage();
+    await screen.findByRole("heading", { name: "Ingestion des mesures", level: 2 });
+
+    fireEvent.change(screen.getByLabelText("Site"), { target: { value: "SITE-002" } });
+
+    await waitFor(() => {
+      expect(fetchSiteIndicators).toHaveBeenLastCalledWith(
+        expect.objectContaining({ siteId: "SITE-002" }),
+      );
+    });
+    expect(fetchSensorHistory).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "SITE-002",
+      expect.anything(),
+    );
+  });
+
+  it("garde les mesures affichées quand les diagnostics échouent", async () => {
+    fetchSiteIndicators.mockRejectedValue(
+      new ApiError("L'API métier est injoignable.", null),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
+    const alerts = await screen.findAllByRole("alert");
+    expect(
+      alerts.some((alert) => alert.textContent?.includes("État de l'ingestion indisponible")),
+    ).toBe(true);
+  });
+});
+
+describe("SiteDashboardPage · recommandations (EV-54)", () => {
+  it("remplit la zone Recommandations avec les actions de l'API", async () => {
+    renderPage();
+
+    expect(
+      await screen.findByText("Pointe prévue à 18 h : décaler la charge du four si possible."),
+    ).toBeDefined();
+    const carte = screen.getByRole("region", { name: "Recommandations" });
+    expect(within(carte).getByText("élevée")).toBeDefined();
+    expect(fetchRecommendations).toHaveBeenCalledWith(
+      expect.objectContaining({ siteId: "SITE-001" }),
+    );
+  });
+
+  it("suit le site choisi", async () => {
+    renderPage();
+    await screen.findByText("Pointe prévue à 18 h : décaler la charge du four si possible.");
+
+    fireEvent.change(screen.getByLabelText("Site"), { target: { value: "SITE-002" } });
+
+    await waitFor(() => {
+      expect(fetchRecommendations).toHaveBeenLastCalledWith(
+        expect.objectContaining({ siteId: "SITE-002" }),
+      );
+    });
+  });
+
+  it("garde les mesures affichées quand seules les recommandations échouent", async () => {
+    fetchRecommendations.mockRejectedValue(
+      new ApiError("L'API métier est injoignable.", null),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
+    const alerts = await screen.findAllByRole("alert");
+    expect(
+      alerts.some((alert) => alert.textContent?.includes("Recommandations indisponibles")),
+    ).toBe(true);
+  });
+
+  it("reprend la raison de l'API quand aucune action n'est à proposer", async () => {
+    fetchRecommendations.mockResolvedValue(
+      makeRecommendations({
+        items: [],
+        detail: "Aucune prévision archivée sur l'horizon demandé.",
+        model_version: null,
+      }),
+    );
+
+    renderPage();
+
+    expect(
+      await screen.findByText("Aucune prévision archivée sur l'horizon demandé."),
+    ).toBeDefined();
+  });
+});
+
+describe("SiteDashboardPage · commandes et historiques", () => {
+  it("affiche l'historique des pics et le registre des modèles", async () => {
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { name: "Historique des pics de charge", level: 2 }),
+    ).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Modèles", level: 2 })).toBeDefined();
+    expect(await screen.findByText("enervision_xgboost · 3")).toBeDefined();
+  });
+
+  it("ne propose aucune commande à un rôle lecteur", async () => {
+    renderPage();
+
+    await screen.findByRole("heading", { name: "Actions d'exploitation", level: 2 });
+    expect(screen.queryByRole("button", { name: /Déclencher un pic/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Recharger les sites" })).toBeNull();
+    expect(
+      screen.getByText("Le rôle reader ne permet pas d'agir sur la source."),
+    ).toBeDefined();
+  });
+
+  it("relit l'historique des pics après un déclenchement", async () => {
+    renderPage({ role: "writer" });
+    await screen.findByRole("button", { name: /Déclencher un pic/ });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Déclencher un pic/ }));
+    });
+
+    expect(triggerSpike).toHaveBeenCalledWith(
+      expect.objectContaining({ siteId: "SITE-001" }),
+    );
+    // Deux lectures : le montage, puis celle que le déclenchement provoque.
+    await waitFor(() => {
+      expect(fetchSpikes).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("relit le référentiel après une synchronisation", async () => {
+    renderPage({ role: "writer" });
+    await screen.findByRole("button", { name: "Recharger les sites" });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Recharger les sites" }));
+    });
+
+    expect(syncSites).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(fetchSites).toHaveBeenCalledTimes(2);
+    });
+    expect(
+      screen.getByText("7 site(s) synchronisé(s) sur 7 annoncé(s) par la source"),
+    ).toBeDefined();
+  });
+
+  it("nomme le refus quand la source rejette le pic", async () => {
+    triggerSpike.mockRejectedValue(
+      new ApiError("L'API métier a renvoyé une erreur serveur (502).", 502),
+    );
+
+    renderPage({ role: "writer" });
+    await screen.findByRole("button", { name: /Déclencher un pic/ });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Déclencher un pic/ }));
+    });
+
+    const alerts = await screen.findAllByRole("alert");
+    expect(
+      alerts.some((alert) => alert.textContent?.includes("Commande refusée")),
+    ).toBe(true);
+  });
+});
+
+describe("SiteDashboardPage · période de l'historique (EV-53)", () => {
+  it("interroge les 24 dernières heures à l'ouverture", async () => {
+    renderPage();
+
+    await screen.findByText("Consommation réelle (kW)");
+    const { startTime, endTime } = fetchReadings.mock.calls[0][0];
+    const heures = (Date.parse(endTime) - Date.parse(startTime)) / 3_600_000;
+    expect(Math.round(heures)).toBe(24);
+  });
+
+  it("relit les mesures sur la durée rapide choisie", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "6 h" }));
+    });
+
+    await waitFor(() => {
+      const dernier = fetchReadings.mock.calls.at(-1)?.[0];
+      const heures =
+        (Date.parse(dernier.endTime) - Date.parse(dernier.startTime)) / 3_600_000;
+      expect(Math.round(heures)).toBe(6);
+    });
+  });
+
+  it("relit les mesures sur les bornes saisies", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+
+    const debut = new Date("2026-09-01T08:00:00Z");
+    const fin = new Date("2026-09-01T20:00:00Z");
+    const local = (moment: Date) =>
+      new Date(moment.getTime() - moment.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+
+    fireEvent.change(screen.getByLabelText("Début"), { target: { value: local(debut) } });
+    fireEvent.change(screen.getByLabelText("Fin"), { target: { value: local(fin) } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Appliquer" }));
+    });
+
+    await waitFor(() => {
+      expect(fetchReadings).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          startTime: debut.toISOString(),
+          endTime: fin.toISOString(),
+        }),
+      );
+    });
+  });
+
+  it("ne prolonge pas la fenêtre des prédictions sur une période passée", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+
+    const debut = new Date("2026-09-01T08:00:00Z");
+    const fin = new Date("2026-09-01T20:00:00Z");
+    const local = (moment: Date) =>
+      new Date(moment.getTime() - moment.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+
+    fireEvent.change(screen.getByLabelText("Début"), { target: { value: local(debut) } });
+    fireEvent.change(screen.getByLabelText("Fin"), { target: { value: local(fin) } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Appliquer" }));
+    });
+
+    // Période entièrement passée : les prédictions utiles sont celles
+    // archivées pendant cette période, pas les 24 h qui la suivent.
+    await waitFor(() => {
+      expect(fetchPredictions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ endTime: fin.toISOString() }),
+      );
+    });
+  });
+
+  it("refuse une période inversée sans appeler l'API", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+    const avant = fetchReadings.mock.calls.length;
+
+    const local = (iso: string) => {
+      const moment = new Date(iso);
+      return new Date(moment.getTime() - moment.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+    };
+    fireEvent.change(screen.getByLabelText("Début"), {
+      target: { value: local("2026-09-02T20:00:00Z") },
+    });
+    fireEvent.change(screen.getByLabelText("Fin"), {
+      target: { value: local("2026-09-02T08:00:00Z") },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Appliquer" }));
+
+    const alerts = await screen.findAllByRole("alert");
+    expect(
+      alerts.some((zone) =>
+        zone.textContent?.includes("La date de fin doit suivre la date de début."),
+      ),
+    ).toBe(true);
+    expect(fetchReadings.mock.calls.length).toBe(avant);
+  });
+});
+
+describe("SiteDashboardPage · alertes actives (EV-17)", () => {
+  it("affiche les alertes du site à côté des recommandations", async () => {
+    renderPage();
+
+    // Le titre apparaît avant la réponse : c'est le contenu qu'on attend.
+    expect(
+      await screen.findByText("Pic de consommation détecté sur le site."),
+    ).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Alertes actives", level: 2 })).toBeDefined();
+    expect(fetchAlerts).toHaveBeenCalledWith(
+      expect.objectContaining({ siteId: "SITE-001" }),
+    );
+  });
+
+  it("suit le site choisi", async () => {
+    renderPage();
+    await screen.findByText("Pic de consommation détecté sur le site.");
+
+    fireEvent.change(screen.getByLabelText("Site"), { target: { value: "SITE-002" } });
+
+    await waitFor(() => {
+      expect(fetchAlerts).toHaveBeenLastCalledWith(
+        expect.objectContaining({ siteId: "SITE-002" }),
+      );
+    });
+  });
+
+  it("garde les mesures affichées quand seules les alertes échouent", async () => {
+    fetchAlerts.mockRejectedValue(new ApiError("L'API métier est injoignable.", null));
+
+    renderPage();
+
+    expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
+    const alerts = await screen.findAllByRole("alert");
+    expect(
+      alerts.some((zone) => zone.textContent?.includes("Alertes indisponibles")),
+    ).toBe(true);
   });
 });

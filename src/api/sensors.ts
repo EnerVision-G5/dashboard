@@ -21,6 +21,9 @@ import { toApiError } from "./http";
 /** État d'un capteur d'un site, tel que la source le déclare. */
 export type SensorHealth = components["schemas"]["SensorHealthOut"];
 
+/** Épisode de panne d'un capteur, borné par son début et sa fin. */
+export type SensorFailure = components["schemas"]["SensorFailureOut"];
+
 /** Capteur nommé par le contrat. */
 export type SensorName = SensorHealth["capteur"];
 
@@ -32,6 +35,20 @@ export function sensorsPath(siteId: string): string {
   return `/api/v1/sites/${encodeURIComponent(siteId)}/sensors`;
 }
 
+/** Chemin de l'historique des pannes de capteur d'un site. */
+export function sensorHistoryPath(siteId: string): string {
+  return `${sensorsPath(siteId)}/history`;
+}
+
+/**
+ * Nombre d'épisodes de panne demandés.
+ *
+ * L'écran montre un historique, pas un journal d'exploitation : au-delà d'une
+ * dizaine d'épisodes, la liste cesse d'être lisible et le besoin devient celui
+ * d'un export, hors périmètre du dashboard.
+ */
+export const SENSOR_HISTORY_LIMIT = 10;
+
 /** Lit l'état des capteurs d'un site. */
 export async function fetchSensors(
   client: AxiosInstance,
@@ -40,6 +57,30 @@ export async function fetchSensors(
 ): Promise<SensorHealth[]> {
   try {
     const response = await client.get<SensorHealth[]>(sensorsPath(siteId), { signal });
+    return response.data;
+  } catch (error) {
+    throw toApiError(error, API_SERVICE_LABEL);
+  }
+}
+
+/**
+ * Lit les épisodes de panne de capteur d'un site, le plus récent d'abord.
+ *
+ * Les épisodes en cours ne sont pas demandés séparément : le contrat accepte
+ * un filtre `ongoing`, mais séparer les deux listes obligerait à deux requêtes
+ * pour reconstituer une chronologie que l'API sert déjà d'un bloc — `ongoing`
+ * distingue les deux cas sur chaque ligne.
+ */
+export async function fetchSensorHistory(
+  client: AxiosInstance,
+  siteId: string,
+  signal?: AbortSignal,
+): Promise<SensorFailure[]> {
+  try {
+    const response = await client.get<SensorFailure[]>(sensorHistoryPath(siteId), {
+      params: { limit: SENSOR_HISTORY_LIMIT },
+      signal,
+    });
     return response.data;
   } catch (error) {
     throw toApiError(error, API_SERVICE_LABEL);

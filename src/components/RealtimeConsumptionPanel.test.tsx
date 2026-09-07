@@ -113,3 +113,100 @@ describe("RealtimeConsumptionPanel", () => {
     expect(screen.getByText("Aucune mesure connue pour ce site.")).toBeDefined();
   });
 });
+
+describe("RealtimeConsumptionPanel · contrat 1.5.0 (EV-52)", () => {
+  const now = new Date("2026-09-03T10:00:00Z");
+
+  it("suit le seuil de retard servi par l'API plutôt que le sien", () => {
+    // Trois minutes : en retard sur le seuil interne de deux minutes, dans les
+    // temps sur les cinq minutes annoncées par l'API.
+    const reading = makeReading({ timestamp: "2026-09-03T09:57:00Z" });
+
+    render(
+      <RealtimeConsumptionPanel
+        reading={reading}
+        isLoading={false}
+        error={null}
+        now={now}
+        staleThresholdSeconds={300}
+      />,
+    );
+
+    expect(screen.queryByText(/l'ingestion est en retard/)).toBeNull();
+  });
+
+  it("nomme le seuil de l'API quand la mesure le dépasse", () => {
+    const reading = makeReading({ timestamp: "2026-09-03T09:50:00Z" });
+
+    render(
+      <RealtimeConsumptionPanel
+        reading={reading}
+        isLoading={false}
+        error={null}
+        now={now}
+        staleThresholdSeconds={300}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Dernière mesure plus vieille que le seuil de 5 min servi par l'API : l'ingestion est en retard.",
+      ),
+    ).toBeDefined();
+  });
+
+  it("retombe sur le seuil du guide quand l'API n'en fournit pas", () => {
+    const reading = makeReading({ timestamp: "2026-09-03T09:57:00Z" });
+
+    render(
+      <RealtimeConsumptionPanel reading={reading} isLoading={false} error={null} now={now} />,
+    );
+
+    expect(
+      screen.getByText(
+        "Dernière mesure vieille de plus de deux minutes : l'ingestion est en retard.",
+      ),
+    ).toBeDefined();
+  });
+
+  it("signale une mesure écartée des agrégats, avec son motif", () => {
+    const reading = makeReading({
+      consumption_kw: 4820,
+      excluded: true,
+      exclusion_reason: "spike_simule",
+    });
+
+    render(
+      <RealtimeConsumptionPanel reading={reading} isLoading={false} error={null} now={now} />,
+    );
+
+    expect(screen.getByText(/Mesure écartée des calculs agrégés : spike_simule/)).toBeDefined();
+    // La valeur reste affichée : l'API ne la cache pas, l'écran non plus.
+    expect(screen.getByText("4 820 kW")).toBeDefined();
+  });
+
+  it("dit qu'aucun motif n'est précisé plutôt que d'en inventer", () => {
+    const reading = makeReading({ excluded: true, exclusion_reason: null });
+
+    render(
+      <RealtimeConsumptionPanel reading={reading} isLoading={false} error={null} now={now} />,
+    );
+
+    expect(
+      screen.getByText(/Mesure écartée des calculs agrégés, sans motif précisé par la source/),
+    ).toBeDefined();
+  });
+
+  it("ne dit rien de l'exclusion sur une mesure retenue", () => {
+    render(
+      <RealtimeConsumptionPanel
+        reading={makeReading()}
+        isLoading={false}
+        error={null}
+        now={now}
+      />,
+    );
+
+    expect(screen.queryByText(/écartée des calculs agrégés/)).toBeNull();
+  });
+});

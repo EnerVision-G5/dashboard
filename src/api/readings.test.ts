@@ -137,4 +137,13 @@ describe("isStale", () => {
 
     expect(isStale(reading, now)).toBe(true);
   });
+
+  it("obéit au seuil qu'on lui passe plutôt qu'au sien (EV-52)", () => {
+    const reading = makeReading({ timestamp: "2026-09-03T09:57:00Z" });
+
+    // Trois minutes d'âge : en retard sur le seuil interne de deux minutes,
+    // dans les temps sur le seuil de cinq minutes servi par l'API.
+    expect(isStale(reading, now)).toBe(true);
+    expect(isStale(reading, now, 300_000)).toBe(false);
+  });
 });

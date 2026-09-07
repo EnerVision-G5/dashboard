@@ -69,14 +69,25 @@ export async function fetchLatestReading(
 }
 
 /**
- * Vrai si la mesure date de plus de `STALE_READING_MS`.
+ * Vrai si la mesure est plus vieille que le seuil.
+ *
+ * Le seuil est un paramètre depuis EV-52, et `STALE_READING_MS` n'est plus que
+ * son repli : le contrat 1.5.0 publie `stale_threshold_seconds` avec les
+ * indicateurs d'ingestion, et c'est celui-là qui fait autorité. Deux seuils
+ * différents sur le même écran — l'un écrit ici, l'autre servi par l'API —
+ * finiraient par se contredire, un panneau annonçant un retard que l'autre
+ * ignore.
  *
  * Un horodatage illisible est tenu pour en retard : mieux vaut afficher un
  * doute que présenter une valeur d'âge inconnu comme fraîche.
  */
-export function isStale(reading: EnergyReading, now: Date = new Date()): boolean {
+export function isStale(
+  reading: EnergyReading,
+  now: Date = new Date(),
+  thresholdMs: number = STALE_READING_MS,
+): boolean {
   const measuredAt = Date.parse(reading.timestamp);
-  return Number.isNaN(measuredAt) || now.getTime() - measuredAt > STALE_READING_MS;
+  return Number.isNaN(measuredAt) || now.getTime() - measuredAt > thresholdMs;
 }
 
 interface FetchReadingsOptions {

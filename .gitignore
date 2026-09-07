@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 
 .env
+
+# Rapports des scans lancés en local (.github/scripts/zap-baseline.sh, Grype)
+zap-report/
+grype-report.txt

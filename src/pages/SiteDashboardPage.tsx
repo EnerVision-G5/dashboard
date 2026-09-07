@@ -7,31 +7,66 @@
  *
  * Trois zones sous l'en-tête, comme la maquette les nomme :
  *   - Consommation temps réel, alimentée par GET /readings/latest ;
- *   - Recommandations, sans donnée tant que le contrat n'en publie pas ;
+ *   - Recommandations, servies par l'API depuis EV-54, et les alertes
+ *     actives d'EV-17 à côté d'elles — un conseil et un constat se lisent
+ *     ensemble mais ne se mélangent pas ;
  *   - Indicateurs, qui porte le graphique consommation / prédiction d'EV-16.
+ *
+ * Une seconde rangée porte les diagnostics d'EV-52 : ingestion, écart
+ * prédiction/réel, et mesures écartées avec les pannes de capteur. Une
+ * troisième porte les deux seules commandes du dashboard — déclencher un pic,
+ * resynchroniser le référentiel — avec l'historique des pics et le registre
+ * des modèles.
  *
  * La grille passe de une à deux puis à trois zones selon la largeur : la
  * maquette est dessinée pour un écran large, mais un panneau temps réel doit
  * rester lisible sur un téléphone en intervention.
  */
 
+import { AlertsPanel } from "../components/AlertsPanel";
 import { ConsumptionPredictionChart } from "../components/ConsumptionPredictionChart";
 import { DataQualityBanner } from "../components/DataQualityBanner";
+import { DataQualityBarChart } from "../components/DataQualityBarChart";
 import { DemoDataBadge } from "../components/DemoDataBadge";
+import { ExcludedMeasuresPanel } from "../components/ExcludedMeasuresPanel";
+import { ForecastAccuracyPanel } from "../components/ForecastAccuracyPanel";
+import { IngestionPanel } from "../components/IngestionPanel";
+import { ModelRegistryPanel } from "../components/ModelRegistryPanel";
 import { RealtimeConsumptionPanel } from "../components/RealtimeConsumptionPanel";
 import { RecommendationsPanel } from "../components/RecommendationsPanel";
+import { SiteActionsPanel } from "../components/SiteActionsPanel";
 import { SiteSelector } from "../components/SiteSelector";
-import { countMissingReadings } from "../lib/series";
+import { TimeRangePicker } from "../components/TimeRangePicker";
+import { SpikeHistoryPanel } from "../components/SpikeHistoryPanel";
+import { countMissingReadings, summarizeExclusions } from "../lib/series";
+import { DEFAULT_WINDOW_HOURS, recentWindow } from "../lib/timeWindow";
+import { useAlerts } from "../hooks/useAlerts";
 import { useDataHealth } from "../hooks/useDataHealth";
 import { useLatestReading } from "../hooks/useLatestReading";
+import { useRecommendations } from "../hooks/useRecommendations";
+import { useModelRegistry } from "../hooks/useModelRegistry";
+import { useSiteDiagnostics } from "../hooks/useSiteDiagnostics";
+import { useSpikeHistory } from "../hooks/useSpikeHistory";
 import { useSiteSeries } from "../hooks/useSiteSeries";
 import { useSites } from "../hooks/useSites";
+import { useState } from "react";
 import { Card } from "../ui/Card";
 import { EmptyState, ErrorState, LoadingState } from "../ui/states";
 
 export function SiteDashboardPage() {
-  const { sites, selectedSite, selectSite, isLoading: sitesLoading, error: sitesError } =
-    useSites();
+  const {
+    sites,
+    selectedSite,
+    selectSite,
+    reload: reloadSites,
+    isLoading: sitesLoading,
+    error: sitesError,
+  } = useSites();
+  // La fenêtre est fixée une fois, à l'ouverture, puis change sur demande.
+  // La recalculer à chaque rendu relancerait les appels sans fin.
+  const [timeWindow, setTimeWindow] = useState(() =>
+    recentWindow(new Date(), DEFAULT_WINDOW_HOURS),
+  );
   const {
     points,
     prediction,
@@ -40,7 +75,7 @@ export function SiteDashboardPage() {
     predictionError,
     windowHours,
     predictionSource,
-  } = useSiteSeries(selectedSite?.site_id ?? null);
+  } = useSiteSeries(selectedSite?.site_id ?? null, timeWindow);
   const {
     reading: latestReading,
     isLoading: latestLoading,
@@ -58,9 +93,45 @@ export function SiteDashboardPage() {
     (siteId) => sites.find((site) => site.site_id === siteId)?.site_name ?? siteId,
   );
 
+  const {
+    alerts,
+    isLoading: alertsLoading,
+    error: alertsError,
+    windowHours: alertsWindowHours,
+  } = useAlerts(selectedSite?.site_id ?? null);
+  const {
+    recommendations,
+    isLoading: recommendationsLoading,
+    error: recommendationsError,
+  } = useRecommendations(selectedSite?.site_id ?? null);
+  const {
+    indicators: siteIndicators,
+    failures,
+    isLoading: diagnosticsLoading,
+    indicatorsError: siteIndicatorsError,
+    failuresError,
+  } = useSiteDiagnostics(selectedSite?.site_id ?? null);
+
+  const {
+    spikes,
+    isLoading: spikesLoading,
+    error: spikesError,
+    reload: reloadSpikes,
+  } = useSpikeHistory(selectedSite?.site_id ?? null);
+  const {
+    current: currentModel,
+    models,
+    isLoading: modelsLoading,
+    error: modelsError,
+    currentError: currentModelError,
+  } = useModelRegistry();
+
   const hasActual = points.some((point) => point.actualKw !== null);
   const hasPredicted = points.some((point) => point.predictedKw !== null);
   const missingReadings = countMissingReadings(points);
+  // Les mesures écartées sont tirées de la série déjà chargée pour le
+  // graphique : aucune requête de plus pour la même information.
+  const exclusions = summarizeExclusions(points);
 
   return (
     <>
@@ -136,19 +207,47 @@ export function SiteDashboardPage() {
                   reading={latestReading}
                   isLoading={latestLoading}
                   error={latestError}
+                  // Le seuil de retard vient de l'API, pas du front : les deux
+                  // panneaux de fraîcheur de l'écran disent alors la même
+                  // chose (EV-52).
+                  staleThresholdSeconds={
+                    siteIndicators?.ingestion.stale_threshold_seconds
+                  }
                 />
               </div>
 
               <div className="lg:col-span-3">
-                <RecommendationsPanel />
+                <RecommendationsPanel
+                  recommendations={recommendations}
+                  isLoading={recommendationsLoading}
+                  error={recommendationsError}
+                />
+              </div>
+
+              <div className="md:col-span-2 lg:col-span-6">
+                <AlertsPanel
+                  alerts={alerts}
+                  isLoading={alertsLoading}
+                  error={alertsError}
+                  windowHours={alertsWindowHours}
+                />
               </div>
 
               <div className="md:col-span-2 lg:col-span-6">
                 <Card
                   title="Indicateurs"
-                  description={`Consommation et prédiction sur les ${windowHours} dernières heures`}
+                  description={`Consommation et prédiction sur ${windowHours} h`}
                 >
                   <div className="flex flex-col gap-4">
+                    {/* La clé remonte le sélecteur quand la fenêtre change
+                        par un bouton de durée rapide : ses champs repartent
+                        alors de la période appliquée. */}
+                    <TimeRangePicker
+                      key={`${timeWindow.startTime}-${timeWindow.endTime}`}
+                      window={timeWindow}
+                      onApply={setTimeWindow}
+                    />
+
                     {readingsError !== null && (
                       <ErrorState title="Mesures indisponibles">{readingsError}</ErrorState>
                     )}
@@ -161,15 +260,23 @@ export function SiteDashboardPage() {
                         Chargement des données du site {selectedSite.site_name}…
                       </LoadingState>
                     ) : points.length === 0 ? (
-                      <EmptyState>
-                        Aucune donnée à afficher pour ce site sur les {windowHours} dernières
-                        heures.
+                      <EmptyState detail="Une autre période peut être appliquée ci-dessus.">
+                        Aucune donnée à afficher pour ce site sur cette période.
                       </EmptyState>
                     ) : (
                       <ConsumptionPredictionChart
                         points={points}
-                        description={`Consommation réelle et prédiction du site ${selectedSite.site_name}, en kilowatts, sur les ${windowHours} dernières heures.`}
+                        description={`Consommation réelle et prédiction du site ${selectedSite.site_name}, en kilowatts, du ${new Date(timeWindow.startTime).toLocaleString("fr-FR")} au ${new Date(timeWindow.endTime).toLocaleString("fr-FR")}.`}
                       />
+                    )}
+
+                    {!seriesLoading && points.length > 0 && (
+                      <div>
+                        <h3 className="text-annexe font-medium tracking-wide text-ardoise-600 uppercase">
+                          Qualité des mesures de la fenêtre
+                        </h3>
+                        <DataQualityBarChart points={points} />
+                      </div>
                     )}
 
                     <ul className="flex flex-wrap gap-x-6 gap-y-1 text-corps text-ardoise-600">
@@ -192,6 +299,56 @@ export function SiteDashboardPage() {
                   </div>
                 </Card>
               </div>
+            </div>
+
+            {/* Diagnostics d'EV-52, sous la maquette : ils expliquent la
+                consommation affichée au-dessus — d'où viennent les mesures,
+                ce qui a été écarté, et ce que valent les prévisions — mais ne
+                sont pas ce qu'on vient lire en premier. */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <IngestionPanel
+                ingestion={siteIndicators?.ingestion ?? null}
+                isLoading={diagnosticsLoading}
+                error={siteIndicatorsError}
+              />
+              <ForecastAccuracyPanel
+                accuracy={siteIndicators?.accuracy ?? null}
+                isLoading={diagnosticsLoading}
+                error={siteIndicatorsError}
+              />
+              <ExcludedMeasuresPanel
+                exclusions={exclusions}
+                failures={failures}
+                isLoading={seriesLoading}
+                failuresError={failuresError}
+                windowHours={windowHours}
+              />
+            </div>
+
+            {/* Les commandes et ce qu'elles produisent, en bas d'écran : on
+                agit sur la source après avoir lu son état, pas avant. */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <SiteActionsPanel
+                siteId={selectedSite.site_id}
+                siteName={selectedSite.site_name}
+                // Un pic déclenché doit apparaître dans son historique sans
+                // recharger la page ; une synchronisation doit rafraîchir le
+                // sélecteur de site.
+                onSpikeTriggered={reloadSpikes}
+                onSitesSynced={reloadSites}
+              />
+              <SpikeHistoryPanel
+                spikes={spikes}
+                isLoading={spikesLoading}
+                error={spikesError}
+              />
+              <ModelRegistryPanel
+                current={currentModel}
+                models={models}
+                isLoading={modelsLoading}
+                error={modelsError}
+                currentError={currentModelError}
+              />
             </div>
           </>
         )}

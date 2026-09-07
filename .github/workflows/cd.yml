@@ -1,52 +1,48 @@
 name: cd
 
-# Livraison de l'image Docker du dashboard.
-#
-# À chaque poussée sur master (donc à chaque merge intégré), on rejoue d'abord
-# l'intégralité de la CI (lint + tests + build) puis, seulement si elle passe,
-# on construit l'image de production et on la publie sur GHCR en la taguant
-# avec le SHA Git.
+# Livraison de l'image Docker du dashboard : à chaque push sur master, et à la
+# demande pour republier un commit déjà intégré. L'image est construite une
+# seule fois, vérifiée (Grype, ZAP, smoke test), et poussée en dernier : aucun
+# tag n'atteint GHCR tant qu'un contrôle a échoué.
 on:
   push:
     branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: cd-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  # Barrière qualité : réutilise ci.yml tel quel. `build` ne démarre pas tant
-  # que eslint, les tests et le build Vite ne sont pas verts.
+  # Lint, tests et build Vite. Les scans d'image de la CI sont sautés : c'est
+  # l'image construite ci-dessous, celle qui sera publiée, qui est scannée.
   ci:
     uses: ./.github/workflows/ci.yml
+    with:
+      skip-image-scans: true
     secrets: inherit
 
   build:
-    name: Build & push image (GHCR)
+    name: Construire, vérifier puis publier l'image
     needs: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      # Nom d'image en minuscules (GHCR l'exige, le nom de repo peut contenir
-      # des majuscules).
+      # GHCR exige un nom d'image en minuscules.
       - name: Préparer la référence d'image
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
-      - name: Connexion à GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          # Jeton éphémère fourni par Actions, jamais stocké dans l'image.
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Calculer tags et labels
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.IMAGE }}
           tags: |
@@ -54,27 +50,40 @@ jobs:
             type=raw,value=latest
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - name: Build & push
-        id: build
-        uses: docker/build-push-action@v6
+      # Chargée dans le démon local, pas poussée : tout ce qui suit porte sur
+      # ces octets-là, et ce sont eux que `docker push` enverra.
+      - name: Construire l'image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: ./Dockerfile
-          push: true
+          push: false
+          load: true
           provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Reproduit un déploiement sur machine vierge : pull par digest immuable,
-      # démarrage sans aucun fichier du dépôt, vérification du service.
-      - name: Smoke test de l'image publiée
+      - name: Grype
+        uses: anchore/scan-action@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
+        with:
+          image: ${{ env.IMAGE }}:latest
+          severity-cutoff: high
+          only-fixed: true
+          fail-build: true
+          output-format: table
+          output-file: grype-report.txt
+
+      - name: OWASP ZAP
+        run: .github/scripts/zap-baseline.sh "$IMAGE:latest"
+
+      # Démarrage sans aucun fichier du dépôt, comme sur l'hôte cible.
+      - name: Smoke test
         run: |
-          ref="${IMAGE}@${{ steps.build.outputs.digest }}"
-          docker run --rm -d --name front-smoke -p 8080:8080 "$ref"
+          docker run --rm -d --name front-smoke -p 8080:8080 "$IMAGE:latest"
           ok=0
           for _ in $(seq 1 30); do
             if curl -fsS http://localhost:8080/healthz >/dev/null \
@@ -87,14 +96,60 @@ jobs:
           docker rm -f front-smoke >/dev/null
           test "$ok" = 1
 
+      - name: Connexion à GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publier l'image vérifiée
+        id: push
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          for tag in $TAGS; do
+            docker push "$tag"
+          done
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:latest")
+          echo "digest=${digest##*@}" >> "$GITHUB_OUTPUT"
+
       - name: Récapitulatif
+        if: always()
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.push.outputs.digest }}
         run: |
           {
-            echo "### Image publiée"
+            if [ -n "$DIGEST" ]; then
+              echo "### Image publiée"
+              echo
+              echo '```'
+              echo "$TAGS"
+              echo '```'
+              echo
+              echo "digest : \`$DIGEST\`"
+            else
+              echo "### Image NON publiée"
+              echo
+              echo "Un contrôle a échoué avant le push (Grype, ZAP ou smoke test) : aucun tag n'a été envoyé sur GHCR."
+            fi
             echo
+            echo "#### Grype"
             echo '```'
-            echo "${{ steps.meta.outputs.tags }}"
+            cat grype-report.txt 2>/dev/null || echo "(pas de rapport)"
             echo '```'
             echo
-            echo "digest : \`${{ steps.build.outputs.digest }}\`"
+            echo "#### OWASP ZAP"
+            cat zap-report/rapport.md 2>/dev/null || echo "(pas de rapport)"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publier les rapports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rapports-image
+          path: |
+            grype-report.txt
+            zap-report/rapport.*
+          if-no-files-found: warn
