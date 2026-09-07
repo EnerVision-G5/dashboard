@@ -19,9 +19,10 @@ l'ingestion, part de mesures dégradées, état des capteurs — pour qu'aucune
 décision ne soit prise sur des données incomplètes sans le savoir. Voir
 [Bandeau de fraîcheur et de qualité des données](#bandeau-de-fraîcheur-et-de-qualité-des-données).
 
-Le dashboard ne parle qu'à des services EnerVision : l'API métier pour les
-sites et les mesures, le service d'inférence pour la prédiction. **Il n'appelle
-jamais l'API Mock IoT directement.**
+Le dashboard ne parle qu'à **l'API métier EnerVision** : sites, mesures,
+indicateurs, recommandations et prédictions, ces dernières archivées par un job
+de l'API et relues par `GET /api/v1/sites/{site_id}/predictions`. **Il n'appelle
+jamais le service d'inférence ni l'API Mock IoT directement.**
 
 ## Design system
 
@@ -51,8 +52,9 @@ constante au build ; un test le vérifie en forçant `DEV` à `false`.
 
 - **Node 24** (version utilisée par la CI ; `jsdom` exige au minimum Node 22.22
   ou 24.15).
-- Une API métier joignable, et un service d'inférence joignable si l'on veut la
-  prédiction réelle.
+- Une API métier joignable. La prédiction réelle suppose que son job de
+  prédiction ait archivé des résultats, voir
+  [Mode JSON de démonstration](#mode-json-de-démonstration) sinon.
 
 ## Installation et commandes
 
@@ -79,11 +81,9 @@ Copier `.env.example` en `.env` (ou `.env.local`, ignoré par git) et adapter.
 
 | Variable                        | Rôle                                                     | Défaut      |
 | ------------------------------- | -------------------------------------------------------- | ----------- |
-| `VITE_API_BASE_URL`             | Base de l'API métier (sites, mesures)                    | **requise** |
-| `VITE_PREDICT_BASE_URL`         | Base du service d'inférence                              | **requise** |
-| `VITE_PREDICTION_SOURCE`        | `api` (service réel) ou `fixture` (JSON de démonstration) | `api`       |
+| `VITE_API_BASE_URL`             | Base de l'API métier, seul service appelé               | **requise** |
+| `VITE_PREDICTION_SOURCE`        | `api` (prédictions archivées par l'API) ou `fixture` (JSON de démonstration) | `api` |
 | `VITE_DEV_PROXY_API_TARGET`     | Cible du proxy de dev pour `/proxy/api` (facultatif)     | —           |
-| `VITE_DEV_PROXY_PREDICT_TARGET` | Cible du proxy de dev pour `/proxy/predict` (facultatif) | —           |
 
 Aucune de ces valeurs n'est un secret : ce sont des adresses de service. Le
 jeton, lui, n'est jamais configuré — il est obtenu à la connexion et vit en
@@ -123,15 +123,14 @@ il part en clair à quiconque ouvre la page.
 Une base absente n'est pas remplacée par une valeur devinée : l'écran affiche
 une erreur de configuration nommant la variable manquante.
 
-### Deux bases, et après ?
+### Une seule API
 
-Le contrat gelé publie encore deux spécifications distinctes
-(`openapi-api.json` et `openapi-predict.json`), donc deux services. La cible
-d'architecture V2 est un dashboard ne parlant qu'à l'API métier, laquelle ferait
-proxy vers Predict. Le code est prêt pour ce basculement : seules les fonctions
-de `src/config/env.ts` connaissent les bases, les composants ne voient que
-`fetchPrediction`. Le jour venu, il suffira de faire pointer
-`VITE_PREDICT_BASE_URL` sur l'API métier.
+Le contrat gelé publie deux spécifications (`openapi-api.json` et
+`openapi-predict.json`), mais le dashboard n'en consomme qu'une : `api.d.ts`
+est généré depuis `openapi-api.json` seul. Le service d'inférence n'est appelé
+que par l'API métier, dont un job planifié archive les prédictions que le
+dashboard relit. Une seule base à configurer, une seule origine à autoriser
+dans la CSP.
 
 ### Proxy de développement et CORS
 
@@ -144,9 +143,7 @@ cross-origin :
 
 ```bash
 VITE_API_BASE_URL=/proxy/api
-VITE_PREDICT_BASE_URL=/proxy/predict
 VITE_DEV_PROXY_API_TARGET=http://localhost:8080
-VITE_DEV_PROXY_PREDICT_TARGET=http://localhost:8001
 ```
 
 Ce proxy ne concerne que `npm run dev` : l'image de production est servie par
@@ -279,6 +276,7 @@ souscrite et la localisation du site choisi, puis trois zones.
 | Fraîcheur et qualité | `GET /indicators` et `GET /sites/{id}/sensors`, rafraîchis toutes les 60 s | Servie |
 | Consommation temps réel | `GET /sites/{id}/readings/latest`, rafraîchi toutes les 30 s | Servie |
 | Recommandations | `GET /sites/{id}/recommendations`, rafraîchi toutes les 5 min | Servie |
+| Alertes actives | `GET /alerts`, rafraîchi toutes les 30 s | Servie |
 | Indicateurs | graphique consommation / prédiction d'EV-16 | Servi |
 | Diagnostics du site | `GET /sites/{id}/indicators` et `GET /sites/{id}/sensors/history`, rafraîchis toutes les 60 s | Servis |
 | Actions d'exploitation | `POST /simulations/spike/{id}` et `POST /sites/sync`, sur demande | Servies, **rôle `writer`** |
@@ -405,11 +403,46 @@ les mesures : les recommandations découlent des prévisions, qu'un job recalcul
 toutes les heures. Interroger plus souvent relirait le même raisonnement sur
 les mêmes prévisions.
 
+### Alertes actives
+
+**EV-17** affiche les alertes du site à côté des recommandations. Les deux
+partagent la même échelle de gravité — à dessein, dit le contrat — mais pas la
+même liste : une alerte **constate ce qui vient de se produire**, une
+recommandation **propose une action sur ce qui va se produire**. Les mêler
+obligerait le lecteur à distinguer, à chaque ligne, ce qu'il doit croire de ce
+qu'il doit faire.
+
+Deux propriétés de la route commandent l'affichage :
+
+- **le tri est fait côté écran.** `GET /alerts` sert un journal, du plus récent
+  au plus ancien : c'est l'ordre d'un historique, pas celui d'une liste
+  d'incidents à traiter. Le ticket demande un tri par gravité, et
+  `sortBySeverity` s'en charge — à gravité égale, la plus récente passe devant.
+  C'est l'inverse des recommandations, où l'ordre vient de l'API et n'est pas
+  retouché ;
+- **la lecture est bornée à la fenêtre de l'écran** (24 h). La source ne publie
+  que les alertes *actives* — une alerte résolue quitte sa réponse, au moment
+  précis où l'on cherche à l'expliquer — et l'API en conserve le journal. Sans
+  cette borne, un site ayant connu cent incidents en trois mois noierait celui
+  de cette nuit. La fenêtre glisse avec l'horloge à chaque rafraîchissement.
+
+Rafraîchissement toutes les **30 secondes** : une alerte n'a d'intérêt que si
+elle apparaît sans qu'on ait rechargé la page.
+
+`value` et `threshold` ne sont pas garantis par le contrat. Quand les deux sont
+servis, l'écart les rend lisibles d'un coup d'œil — « Relevé 812 kW · seuil
+500 kW » — et quand ils manquent, rien n'est inventé.
+
+> **Écart avec le ticket.** Il demande de consommer « l'endpoint alerts de
+> l'API Mock ». Le dashboard ne parle pas à la source, et n'en a plus besoin :
+> `GET /api/v1/alerts` est servi par l'API métier depuis le contrat 1.5.0. Le
+> ticket a été écrit quand cette route répondait encore 501.
+
 ### Mode dégradé des recommandations
 
-Quand le service d'inférence est indisponible — il répond **503** tant qu'aucun
-modèle n'est publié au registre MLflow, ce qui est le cas courant aujourd'hui —
-l'API **ne propage pas l'erreur**. Elle répond 200 et sert la seule règle qui ne
+Quand le service d'inférence est indisponible pour l'API — il lui répond
+**503** tant qu'aucun modèle n'est publié au registre MLflow, ce qui est le cas
+courant aujourd'hui — l'API **ne propage pas l'erreur**. Elle répond 200 et sert la seule règle qui ne
 dépend pas de la prévision, la panne de capteur, avec `model_version` à `null`.
 
 Le panneau affiche alors un bandeau « Mode dégradé » : les conseils présentés
@@ -476,7 +509,8 @@ dérive apparaît, pour savoir si elle suit une promotion.
 
 **Aucun modèle promu est une situation normale**, pas une panne : le 404 de
 `GET /models/current` est traduit en information. Le registre MLflow peut être
-vide, et c'est précisément ce qui explique le 503 du service d'inférence.
+vide, et c'est précisément ce qui explique le 503 que le service d'inférence
+renvoie au job de prédiction de l'API.
 
 ### Diagnostics du site
 
@@ -534,17 +568,52 @@ POST /api/v1/auth/token                 → jeton, signe tous les appels suivant
 GET  /api/v1/sites                      → référentiel, alimente le sélecteur
 GET  /api/v1/sites/{id}/readings/latest → dernière mesure, panneau temps réel
 GET  /api/v1/sites/{id}/readings        → mesures des 24 dernières heures
-POST /api/v1/predict                    → prévision sur 24 heures
+GET  /api/v1/sites/{id}/predictions     → prévisions archivées par le job de l'API
                                         ↓
                     fusion par horodatage (src/lib/series.ts)
                                         ↓
                          graphique Recharts, deux courbes
 ```
 
+Tout vient de l'API métier : le dashboard ne déclenche jamais une prédiction,
+il relit celles que le job planifié de l'API a archivées, chacune avec sa
+version de modèle et sa date de production (`src/api/predictions.ts` recompose
+la série). Une page vide signifie que le job n'a pas encore tourné pour ce
+site, pas une panne.
+
 Au chargement, le premier site dont le `status` vaut `active` est présélectionné
 — valeur initiale seulement, jamais réimposée ensuite. Changer de site relance
 les deux flux ; la requête précédente est annulée (`AbortController`), et les
 données ne sont affichées que si elles proviennent bien du site demandé.
+
+### Période de l'historique
+
+**EV-53** permet de choisir la période affichée, de deux façons parce qu'elles
+répondent à deux besoins : des **durées rapides** (6 h, 24 h, 3 j, 7 j) pour le
+cas courant, recalculées à chaque clic pour finir à l'instant présent, et des
+**bornes explicites** pour l'analyse d'un incident daté.
+
+La saisie est validée **avant** l'appel : le contrat refuse des bornes
+inversées par un 422, et traduire ce refus après coup serait moins clair que de
+l'empêcher — l'utilisateur sait ce qu'il a écrit, pas ce que l'API en pense. Une
+période de durée nulle est refusée aussi : elle ne rendrait qu'un point.
+
+Deux conséquences que l'écran assume :
+
+- **le format de l'axe suit la profondeur.** Sur 7 jours, une graduation
+  « 14:30 » désignerait cinq jours différents : au-delà de 48 heures, l'axe
+  affiche le jour avec l'heure ;
+- **la fenêtre des prédictions n'est pas celle des mesures.** Quand la période
+  touche le présent, elle est prolongée de son horizon — sinon on ne verrait
+  jamais la prévision à venir. Quand la période est entièrement passée, elle
+  reste identique : les prédictions utiles sont celles archivées pendant cette
+  période, et prolonger ramènerait des heures que l'écran ne montre pas.
+
+> **Au-delà de 13 jours, un avertissement.** La pagination des mesures est
+> bornée à 20 pages de 1 000 éléments, soit environ 13 jours à une mesure par
+> minute. Une période plus profonde est **acceptée mais signalée** : la série
+> serait tronquée sans que rien ne le dise, et un graphique incomplet lu comme
+> un graphique entier est pire qu'un graphique refusé.
 
 ### Pagination des mesures
 
@@ -593,18 +662,17 @@ L'API conserve les valeurs brutes de la source. Le dashboard fait de même :
 Les deux flux échouent indépendamment : une prédiction indisponible n'efface pas
 des mesures correctement reçues. Chaque code a un message dédié — 401, 403, 404,
 422, 501, 503 et service injoignable — et le `detail` du contrat est repris
-quand il apporte une information utile. Toutes les erreurs des deux contrats
-ont la même forme, un objet à un seul champ `detail`.
+quand il apporte une information utile. Toutes les erreurs du contrat ont la
+même forme, un objet à un seul champ `detail`.
 
 **Aucune erreur ne déclenche le mode démonstration.** En mode `api`, une panne
 est affichée comme une panne.
 
 ## Mode JSON de démonstration
 
-`POST /api/v1/predict` est implémenté depuis
-[predict#26](https://github.com/EnerVision-G5/predict/pull/26), mais répond
-**503** tant qu'aucun modèle n'est publié au registre MLflow. Pour démontrer
-l'écran malgré cela :
+`GET /api/v1/sites/{site_id}/predictions` renvoie une page **vide** tant que
+le job de prédiction de l'API n'a rien archivé, ce qui arrive tant qu'aucun
+modèle n'est publié au registre MLflow. Pour démontrer l'écran malgré cela :
 
 ```bash
 VITE_PREDICTION_SOURCE=fixture
@@ -613,20 +681,21 @@ VITE_PREDICTION_SOURCE=fixture
 Dans ce mode :
 
 - la prédiction vient de `src/fixtures/prediction-demo.json`, un JSON versionné,
-  déterministe et conforme à `PredictionOut` (24 points horaires, valeurs fixes,
-  validé par TypeScript via `satisfies`) ;
+  déterministe, converti en la même série `Prediction` que celle recomposée
+  depuis l'API (24 points horaires, valeurs fixes) ;
 - **les mesures restent réelles** : seule la courbe de prédiction est simulée ;
 - un bandeau **« Données de démonstration »** est affiché en haut de l'écran et
   nomme la série concernée ;
 - `model_version` vaut `demo-fixture-1.0.0`, ce qui identifie sans ambiguïté une
   donnée simulée ;
-- aucun appel réseau n'est émis vers le service d'inférence.
+- aucun appel réseau n'est émis pour la prédiction ; les mesures, elles, sont
+  toujours demandées à l'API.
 
 Seul un décalage en jours entiers est appliqué pour amener la série en face de
 la fenêtre affichée, ce qui préserve son profil jour/nuit. Les valeurs, elles,
 ne sont jamais modifiées.
 
-**Pour revenir au service réel :** remettre `VITE_PREDICTION_SOURCE=api` (ou
+**Pour revenir aux prédictions réelles :** remettre `VITE_PREDICTION_SOURCE=api` (ou
 supprimer la ligne) et relancer `npm run dev`. La suppression définitive du mode
 se limite à `src/fixtures/`, à `getPredictionSource` dans `src/config/env.ts` et
 au composant `DemoDataBadge`.

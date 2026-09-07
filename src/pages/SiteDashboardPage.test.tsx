@@ -12,6 +12,7 @@ import { ApiError } from "../api/http";
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthContextValue } from "../auth/AuthContext";
 import {
+  makeAlert,
   makeModel,
   makePrediction,
   makePredictionPoint,
@@ -38,6 +39,7 @@ const fetchSensors = vi.hoisted(() => vi.fn());
 const fetchSiteIndicators = vi.hoisted(() => vi.fn());
 const fetchSensorHistory = vi.hoisted(() => vi.fn());
 const fetchRecommendations = vi.hoisted(() => vi.fn());
+const fetchAlerts = vi.hoisted(() => vi.fn());
 const fetchSpikes = vi.hoisted(() => vi.fn());
 const triggerSpike = vi.hoisted(() => vi.fn());
 const fetchModels = vi.hoisted(() => vi.fn());
@@ -71,6 +73,10 @@ vi.mock("../api/sensors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/sensors")>()),
   fetchSensors,
   fetchSensorHistory,
+}));
+vi.mock("../api/alerts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/alerts")>()),
+  fetchAlerts,
 }));
 vi.mock("../api/recommendations", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/recommendations")>()),
@@ -133,7 +139,6 @@ function renderPage({ role = "reader" as "reader" | "writer" } = {}) {
 
 beforeEach(() => {
   vi.stubEnv("VITE_API_BASE_URL", "http://api.test");
-  vi.stubEnv("VITE_PREDICT_BASE_URL", "http://predict.test");
   fetchSites.mockResolvedValue([SITE_A, SITE_B]);
   fetchReadings.mockResolvedValue(readingsOf("SITE-001", 100));
   fetchLatestReading.mockResolvedValue(
@@ -157,6 +162,7 @@ beforeEach(() => {
   fetchSiteIndicators.mockResolvedValue(makeSiteIndicators({ site_id: "SITE-001" }));
   fetchSensorHistory.mockResolvedValue([]);
   fetchRecommendations.mockResolvedValue(makeRecommendations({ site_id: "SITE-001" }));
+  fetchAlerts.mockResolvedValue([makeAlert()]);
   fetchSpikes.mockResolvedValue([]);
   fetchModels.mockResolvedValue([makeModel()]);
   fetchCurrentModel.mockResolvedValue(makeModel());
@@ -562,7 +568,8 @@ describe("SiteDashboardPage · recommandations (EV-54)", () => {
     expect(
       await screen.findByText("Pointe prévue à 18 h : décaler la charge du four si possible."),
     ).toBeDefined();
-    expect(screen.getByText("élevée")).toBeDefined();
+    const carte = screen.getByRole("region", { name: "Recommandations" });
+    expect(within(carte).getByText("élevée")).toBeDefined();
     expect(fetchRecommendations).toHaveBeenCalledWith(
       expect.objectContaining({ siteId: "SITE-001" }),
     );
@@ -683,6 +690,151 @@ describe("SiteDashboardPage · commandes et historiques", () => {
     const alerts = await screen.findAllByRole("alert");
     expect(
       alerts.some((alert) => alert.textContent?.includes("Commande refusée")),
+    ).toBe(true);
+  });
+});
+
+describe("SiteDashboardPage · période de l'historique (EV-53)", () => {
+  it("interroge les 24 dernières heures à l'ouverture", async () => {
+    renderPage();
+
+    await screen.findByText("Consommation réelle (kW)");
+    const { startTime, endTime } = fetchReadings.mock.calls[0][0];
+    const heures = (Date.parse(endTime) - Date.parse(startTime)) / 3_600_000;
+    expect(Math.round(heures)).toBe(24);
+  });
+
+  it("relit les mesures sur la durée rapide choisie", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "6 h" }));
+    });
+
+    await waitFor(() => {
+      const dernier = fetchReadings.mock.calls.at(-1)?.[0];
+      const heures =
+        (Date.parse(dernier.endTime) - Date.parse(dernier.startTime)) / 3_600_000;
+      expect(Math.round(heures)).toBe(6);
+    });
+  });
+
+  it("relit les mesures sur les bornes saisies", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+
+    const debut = new Date("2026-09-01T08:00:00Z");
+    const fin = new Date("2026-09-01T20:00:00Z");
+    const local = (moment: Date) =>
+      new Date(moment.getTime() - moment.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+
+    fireEvent.change(screen.getByLabelText("Début"), { target: { value: local(debut) } });
+    fireEvent.change(screen.getByLabelText("Fin"), { target: { value: local(fin) } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Appliquer" }));
+    });
+
+    await waitFor(() => {
+      expect(fetchReadings).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          startTime: debut.toISOString(),
+          endTime: fin.toISOString(),
+        }),
+      );
+    });
+  });
+
+  it("ne prolonge pas la fenêtre des prédictions sur une période passée", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+
+    const debut = new Date("2026-09-01T08:00:00Z");
+    const fin = new Date("2026-09-01T20:00:00Z");
+    const local = (moment: Date) =>
+      new Date(moment.getTime() - moment.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+
+    fireEvent.change(screen.getByLabelText("Début"), { target: { value: local(debut) } });
+    fireEvent.change(screen.getByLabelText("Fin"), { target: { value: local(fin) } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Appliquer" }));
+    });
+
+    // Période entièrement passée : les prédictions utiles sont celles
+    // archivées pendant cette période, pas les 24 h qui la suivent.
+    await waitFor(() => {
+      expect(fetchPredictions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ endTime: fin.toISOString() }),
+      );
+    });
+  });
+
+  it("refuse une période inversée sans appeler l'API", async () => {
+    renderPage();
+    await screen.findByText("Consommation réelle (kW)");
+    const avant = fetchReadings.mock.calls.length;
+
+    const local = (iso: string) => {
+      const moment = new Date(iso);
+      return new Date(moment.getTime() - moment.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+    };
+    fireEvent.change(screen.getByLabelText("Début"), {
+      target: { value: local("2026-09-02T20:00:00Z") },
+    });
+    fireEvent.change(screen.getByLabelText("Fin"), {
+      target: { value: local("2026-09-02T08:00:00Z") },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Appliquer" }));
+
+    const alerts = await screen.findAllByRole("alert");
+    expect(
+      alerts.some((zone) =>
+        zone.textContent?.includes("La date de fin doit suivre la date de début."),
+      ),
+    ).toBe(true);
+    expect(fetchReadings.mock.calls.length).toBe(avant);
+describe("SiteDashboardPage · alertes actives (EV-17)", () => {
+  it("affiche les alertes du site à côté des recommandations", async () => {
+    renderPage();
+
+    // Le titre apparaît avant la réponse : c'est le contenu qu'on attend.
+    expect(
+      await screen.findByText("Pic de consommation détecté sur le site."),
+    ).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Alertes actives", level: 2 })).toBeDefined();
+    expect(fetchAlerts).toHaveBeenCalledWith(
+      expect.objectContaining({ siteId: "SITE-001" }),
+    );
+  });
+
+  it("suit le site choisi", async () => {
+    renderPage();
+    await screen.findByText("Pic de consommation détecté sur le site.");
+
+    fireEvent.change(screen.getByLabelText("Site"), { target: { value: "SITE-002" } });
+
+    await waitFor(() => {
+      expect(fetchAlerts).toHaveBeenLastCalledWith(
+        expect.objectContaining({ siteId: "SITE-002" }),
+      );
+    });
+  });
+
+  it("garde les mesures affichées quand seules les alertes échouent", async () => {
+    fetchAlerts.mockRejectedValue(new ApiError("L'API métier est injoignable.", null));
+
+    renderPage();
+
+    expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
+    const alerts = await screen.findAllByRole("alert");
+    expect(
+      alerts.some((zone) => zone.textContent?.includes("Alertes indisponibles")),
     ).toBe(true);
   });
 });

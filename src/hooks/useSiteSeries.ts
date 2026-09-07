@@ -26,7 +26,13 @@ import { fetchReadings } from "../api/readings";
 import { getApiClient } from "../api/clients";
 import { isCancellation } from "../api/http";
 import { buildChartSeries } from "../lib/series";
-import { DEFAULT_WINDOW_HOURS, forecastWindow, recentWindow } from "../lib/timeWindow";
+import type { TimeWindow } from "../lib/timeWindow";
+import {
+  DEFAULT_WINDOW_HOURS,
+  predictionWindowFor,
+  recentWindow,
+  windowHours,
+} from "../lib/timeWindow";
 
 /** État exposé par `useSiteSeries`. */
 export interface SiteSeriesState {
@@ -42,6 +48,8 @@ export interface SiteSeriesState {
   predictionError: string | null;
   /** Profondeur de la fenêtre interrogée, en heures. */
   windowHours: number;
+  /** Fenêtre réellement interrogée, telle qu'elle a été appliquée. */
+  window: TimeWindow;
   /** Origine effective de la série prédite, telle que configurée. */
   predictionSource: PredictionSource;
 }
@@ -67,9 +75,24 @@ function messageOf(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
 }
 
-export function useSiteSeries(siteId: string | null): SiteSeriesState {
+/**
+ * Charge les séries d'un site sur une fenêtre.
+ *
+ * `window` est optionnelle : sans elle, les 24 dernières heures sont lues,
+ * comportement de l'écran avant EV-53. Avec elle, l'appelant choisit la
+ * période — et c'est lui qui la fixe, une fois, plutôt que ce hook qui la
+ * recalculerait à chaque rendu et relancerait les appels sans fin.
+ */
+export function useSiteSeries(
+  siteId: string | null,
+  window?: TimeWindow,
+): SiteSeriesState {
   const [loaded, setLoaded] = useState<LoadedState>(EMPTY);
   const predictionSource = getPredictionSource();
+  // Les bornes servent de dépendances à l'effet : deux objets de même contenu
+  // ne doivent pas déclencher deux chargements.
+  const startTimeRequested = window?.startTime ?? null;
+  const endTimeRequested = window?.endTime ?? null;
 
   useEffect(() => {
     if (siteId === null) {
@@ -81,10 +104,15 @@ export function useSiteSeries(siteId: string | null): SiteSeriesState {
 
     async function load(currentSiteId: string, source: PredictionSource): Promise<void> {
       const now = new Date();
-      const { startTime, endTime } = recentWindow(now, DEFAULT_WINDOW_HOURS);
-      // Les prédictions portent sur l'avenir : leur fenêtre part de maintenant
-      // au lieu d'y aboutir, sinon la requête ne rencontrerait aucun point.
-      const forecast = forecastWindow(now, DEFAULT_WINDOW_HOURS);
+      const readingsWindow =
+        startTimeRequested !== null && endTimeRequested !== null
+          ? { startTime: startTimeRequested, endTime: endTimeRequested }
+          : recentWindow(now, DEFAULT_WINDOW_HOURS);
+      const { startTime, endTime } = readingsWindow;
+      // Les prédictions ne portent pas sur la même fenêtre que les mesures :
+      // prolongée vers l'avenir quand l'écran touche le présent, identique
+      // quand on examine une période passée.
+      const forecast = predictionWindowFor(readingsWindow, now, DEFAULT_WINDOW_HOURS);
       const [readings, prediction] = await Promise.allSettled([
         fetchReadings({
           client: getApiClient(),
@@ -136,10 +164,14 @@ export function useSiteSeries(siteId: string | null): SiteSeriesState {
       active = false;
       controller.abort();
     };
-  }, [siteId, predictionSource]);
+  }, [siteId, predictionSource, startTimeRequested, endTimeRequested]);
 
   // Les données ne sont exposées que si elles proviennent bien du site demandé.
   const isCurrent = siteId !== null && loaded.siteId === siteId;
+  const applied =
+    startTimeRequested !== null && endTimeRequested !== null
+      ? { startTime: startTimeRequested, endTime: endTimeRequested }
+      : null;
 
   return {
     points: isCurrent ? loaded.points : [],
@@ -147,7 +179,8 @@ export function useSiteSeries(siteId: string | null): SiteSeriesState {
     readingsError: isCurrent ? loaded.readingsError : null,
     predictionError: isCurrent ? loaded.predictionError : null,
     isLoading: siteId !== null && !isCurrent,
-    windowHours: DEFAULT_WINDOW_HOURS,
+    windowHours: applied === null ? DEFAULT_WINDOW_HOURS : Math.round(windowHours(applied)),
+    window: applied ?? recentWindow(new Date(), DEFAULT_WINDOW_HOURS),
     predictionSource,
   };
 }

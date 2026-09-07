@@ -6,20 +6,20 @@ import tailwindcss from '@tailwindcss/vite'
 /**
  * Proxy de développement.
  *
- * L'API métier ne publie aucun en-tête `Access-Control-*` : appelée
- * directement depuis http://localhost:5173, sa réponse est bloquée par le
- * navigateur. Servir les deux backends derrière l'origine de Vite règle le
- * problème côté poste de développement, sans rien changer au code applicatif —
- * il suffit de pointer les bases sur les préfixes ci-dessous.
+ * L'API métier ne publie ses en-têtes `Access-Control-*` que pour les origines
+ * listées dans sa variable CORS_ALLOWED_ORIGINS. Tant qu'elle n'y connaît pas
+ * http://localhost:5173, sa réponse est bloquée par le navigateur. Servir l'API
+ * derrière l'origine de Vite évite le cross-origin sur le poste de
+ * développement, sans rien changer au code applicatif : il suffit de pointer
+ * VITE_API_BASE_URL sur le préfixe ci-dessous.
  *
- * Ce proxy ne concerne que `npm run dev`. En production, l'API doit autoriser
- * l'origine du dashboard, ou le servir derrière le même nom de domaine.
+ * Ce proxy ne concerne que `npm run dev`. En production, l'API autorise
+ * l'origine du dashboard par CORS_ALLOWED_ORIGINS.
  */
 function devProxy(env: Record<string, string>): Record<string, ProxyOptions> {
   const routes: Record<string, ProxyOptions> = {}
   const targets = [
     { prefix: '/proxy/api', target: env.VITE_DEV_PROXY_API_TARGET },
-    { prefix: '/proxy/predict', target: env.VITE_DEV_PROXY_PREDICT_TARGET },
   ]
   for (const { prefix, target } of targets) {
     if (target !== undefined && target !== '') {
@@ -90,7 +90,6 @@ export default defineConfig(({ mode }) => {
       // redéfinit ce dont il a besoin avec `vi.stubEnv`.
       env: {
         VITE_API_BASE_URL: 'http://api.test',
-        VITE_PREDICT_BASE_URL: 'http://predict.test',
         VITE_PREDICTION_SOURCE: 'api',
       },
     },

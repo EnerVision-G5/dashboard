@@ -7,7 +7,9 @@
  *
  * Trois zones sous l'en-tête, comme la maquette les nomme :
  *   - Consommation temps réel, alimentée par GET /readings/latest ;
- *   - Recommandations, servies par l'API depuis EV-54 ;
+ *   - Recommandations, servies par l'API depuis EV-54, et les alertes
+ *     actives d'EV-17 à côté d'elles — un conseil et un constat se lisent
+ *     ensemble mais ne se mélangent pas ;
  *   - Indicateurs, qui porte le graphique consommation / prédiction d'EV-16.
  *
  * Une seconde rangée porte les diagnostics d'EV-52 : ingestion, écart
@@ -21,6 +23,7 @@
  * rester lisible sur un téléphone en intervention.
  */
 
+import { AlertsPanel } from "../components/AlertsPanel";
 import { ConsumptionPredictionChart } from "../components/ConsumptionPredictionChart";
 import { DataQualityBanner } from "../components/DataQualityBanner";
 import { DataQualityBarChart } from "../components/DataQualityBarChart";
@@ -33,8 +36,11 @@ import { RealtimeConsumptionPanel } from "../components/RealtimeConsumptionPanel
 import { RecommendationsPanel } from "../components/RecommendationsPanel";
 import { SiteActionsPanel } from "../components/SiteActionsPanel";
 import { SiteSelector } from "../components/SiteSelector";
+import { TimeRangePicker } from "../components/TimeRangePicker";
 import { SpikeHistoryPanel } from "../components/SpikeHistoryPanel";
 import { countMissingReadings, summarizeExclusions } from "../lib/series";
+import { DEFAULT_WINDOW_HOURS, recentWindow } from "../lib/timeWindow";
+import { useAlerts } from "../hooks/useAlerts";
 import { useDataHealth } from "../hooks/useDataHealth";
 import { useLatestReading } from "../hooks/useLatestReading";
 import { useRecommendations } from "../hooks/useRecommendations";
@@ -43,6 +49,7 @@ import { useSiteDiagnostics } from "../hooks/useSiteDiagnostics";
 import { useSpikeHistory } from "../hooks/useSpikeHistory";
 import { useSiteSeries } from "../hooks/useSiteSeries";
 import { useSites } from "../hooks/useSites";
+import { useState } from "react";
 import { Card } from "../ui/Card";
 import { EmptyState, ErrorState, LoadingState } from "../ui/states";
 
@@ -55,6 +62,11 @@ export function SiteDashboardPage() {
     isLoading: sitesLoading,
     error: sitesError,
   } = useSites();
+  // La fenêtre est fixée une fois, à l'ouverture, puis change sur demande.
+  // La recalculer à chaque rendu relancerait les appels sans fin.
+  const [timeWindow, setTimeWindow] = useState(() =>
+    recentWindow(new Date(), DEFAULT_WINDOW_HOURS),
+  );
   const {
     points,
     prediction,
@@ -63,7 +75,7 @@ export function SiteDashboardPage() {
     predictionError,
     windowHours,
     predictionSource,
-  } = useSiteSeries(selectedSite?.site_id ?? null);
+  } = useSiteSeries(selectedSite?.site_id ?? null, timeWindow);
   const {
     reading: latestReading,
     isLoading: latestLoading,
@@ -81,6 +93,12 @@ export function SiteDashboardPage() {
     (siteId) => sites.find((site) => site.site_id === siteId)?.site_name ?? siteId,
   );
 
+  const {
+    alerts,
+    isLoading: alertsLoading,
+    error: alertsError,
+    windowHours: alertsWindowHours,
+  } = useAlerts(selectedSite?.site_id ?? null);
   const {
     recommendations,
     isLoading: recommendationsLoading,
@@ -207,11 +225,29 @@ export function SiteDashboardPage() {
               </div>
 
               <div className="md:col-span-2 lg:col-span-6">
+                <AlertsPanel
+                  alerts={alerts}
+                  isLoading={alertsLoading}
+                  error={alertsError}
+                  windowHours={alertsWindowHours}
+                />
+              </div>
+
+              <div className="md:col-span-2 lg:col-span-6">
                 <Card
                   title="Indicateurs"
-                  description={`Consommation et prédiction sur les ${windowHours} dernières heures`}
+                  description={`Consommation et prédiction sur ${windowHours} h`}
                 >
                   <div className="flex flex-col gap-4">
+                    {/* La clé remonte le sélecteur quand la fenêtre change
+                        par un bouton de durée rapide : ses champs repartent
+                        alors de la période appliquée. */}
+                    <TimeRangePicker
+                      key={`${timeWindow.startTime}-${timeWindow.endTime}`}
+                      window={timeWindow}
+                      onApply={setTimeWindow}
+                    />
+
                     {readingsError !== null && (
                       <ErrorState title="Mesures indisponibles">{readingsError}</ErrorState>
                     )}
@@ -224,14 +260,13 @@ export function SiteDashboardPage() {
                         Chargement des données du site {selectedSite.site_name}…
                       </LoadingState>
                     ) : points.length === 0 ? (
-                      <EmptyState>
-                        Aucune donnée à afficher pour ce site sur les {windowHours} dernières
-                        heures.
+                      <EmptyState detail="Une autre période peut être appliquée ci-dessus.">
+                        Aucune donnée à afficher pour ce site sur cette période.
                       </EmptyState>
                     ) : (
                       <ConsumptionPredictionChart
                         points={points}
-                        description={`Consommation réelle et prédiction du site ${selectedSite.site_name}, en kilowatts, sur les ${windowHours} dernières heures.`}
+                        description={`Consommation réelle et prédiction du site ${selectedSite.site_name}, en kilowatts, du ${new Date(timeWindow.startTime).toLocaleString("fr-FR")} au ${new Date(timeWindow.endTime).toLocaleString("fr-FR")}.`}
                       />
                     )}
 
