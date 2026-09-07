@@ -205,42 +205,11 @@ export function SiteDashboardPage() {
               {selectedSite.site_name}
             </h2>
 
-            {/* Une colonne sur mobile ; deux dès la tablette, le graphique
-                passant alors pleine largeur sous les panneaux ; les trois zones
-                de la maquette côte à côte sur grand écran. Le graphique reçoit
-                la moitié de la grille : c'est lui qui a besoin de place. */}
+            {/* Le graphique vient en tête : c'est la courbe qu'on ouvre
+                l'écran pour lire, et les panneaux qui suivent la commentent.
+                Une colonne sur mobile, deux dès la tablette, et sur grand
+                écran les trois zones de la maquette sous le graphique. */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
-              <div className="lg:col-span-3">
-                <RealtimeConsumptionPanel
-                  reading={latestReading}
-                  isLoading={latestLoading}
-                  error={latestError}
-                  // Le seuil de retard vient de l'API, pas du front : les deux
-                  // panneaux de fraîcheur de l'écran disent alors la même
-                  // chose (EV-52).
-                  staleThresholdSeconds={
-                    siteIndicators?.ingestion.stale_threshold_seconds
-                  }
-                />
-              </div>
-
-              <div className="lg:col-span-3">
-                <RecommendationsPanel
-                  recommendations={recommendations}
-                  isLoading={recommendationsLoading}
-                  error={recommendationsError}
-                />
-              </div>
-
-              <div className="md:col-span-2 lg:col-span-6">
-                <AlertsPanel
-                  alerts={alerts}
-                  isLoading={alertsLoading}
-                  error={alertsError}
-                  windowHours={alertsWindowHours}
-                />
-              </div>
-
               {/* Le graphique occupe toute la largeur : c'est la pièce qui a
                   le plus besoin de place, et une courbe de 1 440 points dans
                   une demi-grille ne se lit pas. */}
@@ -310,6 +279,39 @@ export function SiteDashboardPage() {
                   </div>
                 </Card>
               </div>
+
+              <div className="lg:col-span-3">
+                <RealtimeConsumptionPanel
+                  reading={latestReading}
+                  isLoading={latestLoading}
+                  error={latestError}
+                  // Le seuil de retard vient de l'API, pas du front : les deux
+                  // panneaux de fraîcheur de l'écran disent alors la même
+                  // chose (EV-52).
+                  staleThresholdSeconds={
+                    siteIndicators?.ingestion.stale_threshold_seconds
+                  }
+                />
+              </div>
+
+              <div className="lg:col-span-3">
+                <RecommendationsPanel
+                  recommendations={recommendations}
+                  isLoading={recommendationsLoading}
+                  error={recommendationsError}
+                />
+              </div>
+
+              <div className="md:col-span-2 lg:col-span-6">
+                <AlertsPanel
+                  alerts={alerts}
+                  isLoading={alertsLoading}
+                  error={alertsError}
+                  windowHours={alertsWindowHours}
+                />
+              </div>
+
+
             </div>
 
             {/* Diagnostics d'EV-52, sous la maquette : ils expliquent la

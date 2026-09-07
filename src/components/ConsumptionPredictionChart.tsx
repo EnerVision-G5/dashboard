@@ -3,8 +3,18 @@
  *
  * La courbe réelle est pleine, la prédite en pointillés : la distinction tient
  * au tracé autant qu'à la couleur, pour rester lisible sans percevoir les
- * teintes. `connectNulls` reste à `false` afin qu'une mesure absente laisse un
- * trou visible plutôt qu'un segment inventé.
+ * teintes.
+ *
+ * **Trois traits, pas deux.** La courbe réelle garde `connectNulls={false}` :
+ * une mesure absente y laisse un trou, et le trait plein ne dit que ce qui a
+ * été relevé. Un troisième trait, fin et pointillé, joint par-dessous la
+ * dernière valeur connue à la suivante — sans lui, un parc où mille mesures
+ * manquent sur vingt-quatre heures ne produit qu'une poussière de fragments
+ * illisible.
+ *
+ * La distinction n'est donc pas abandonnée, elle est déplacée dans la forme :
+ * plein pour le mesuré, pointillé fin et atténué pour le seulement joint, et
+ * une entrée de légende qui le nomme.
  */
 
 import {
@@ -18,11 +28,20 @@ import {
   YAxis,
 } from "recharts";
 import type { ChartPoint } from "../lib/series";
+import { valueDomain } from "../lib/series";
 import { token } from "../ui/tokens";
 
 /** Libellés des deux séries, partagés avec la légende et le survol. */
 export const ACTUAL_SERIES_LABEL = "Consommation réelle (kW)";
 export const PREDICTED_SERIES_LABEL = "Prédiction (kW)";
+
+/**
+ * Libellé du trait qui joint deux mesures séparées par un trou.
+ *
+ * Nommé « continuité » et non « consommation » : rien n'a été mesuré sur ce
+ * segment, et la légende doit le dire aussi clairement que la forme du trait.
+ */
+export const BRIDGE_SERIES_LABEL = "Continuité (aucune mesure)";
 
 /**
  * Couleurs des deux séries, lues sur les jetons du design system.
@@ -144,6 +163,10 @@ export function ConsumptionPredictionChart({
               tick={{ fontSize: 12 }}
             />
             <YAxis
+              domain={valueDomain(points)}
+              // Les bornes sont calculées : les laisser s'étendre à un nombre
+              // « rond » les ramènerait vers zéro et annulerait le cadrage.
+              allowDataOverflow={false}
               stroke={token("axe")}
               tick={{ fontSize: 12 }}
               width={64}
@@ -151,7 +174,32 @@ export function ConsumptionPredictionChart({
             />
             <Tooltip content={<SeriesTooltip />} />
             <Legend />
+            {/* Pontage des trous, tracé EN PREMIER donc sous la courbe réelle.
+                Sur le parc actuel, plus de mille mesures manquent sur une
+                fenêtre de vingt-quatre heures : sans ce trait, la courbe se
+                réduit à une poussière de fragments illisible.
+
+                Il relie la dernière valeur connue à la suivante — et il le dit,
+                par un pointillé fin et sa propre entrée de légende. Combler un
+                trou avec le trait plein de la mesure aurait affirmé une
+                continuité que personne n'a relevée ; ici, la forme distingue ce
+                qui est mesuré de ce qui est seulement joint. */}
             <Line
+              className="serie-pontage"
+              type="monotone"
+              dataKey="actualKw"
+              name={BRIDGE_SERIES_LABEL}
+              stroke={ACTUAL_COLOR}
+              strokeOpacity={0.45}
+              strokeWidth={1}
+              strokeDasharray="2 4"
+              dot={false}
+              activeDot={false}
+              connectNulls
+              isAnimationActive={false}
+            />
+            <Line
+              className="serie-mesuree"
               type="monotone"
               dataKey="actualKw"
               name={ACTUAL_SERIES_LABEL}
@@ -162,6 +210,7 @@ export function ConsumptionPredictionChart({
               isAnimationActive={false}
             />
             <Line
+              className="serie-predite"
               type="monotone"
               dataKey="predictedKw"
               name={PREDICTED_SERIES_LABEL}
