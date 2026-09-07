@@ -72,3 +72,30 @@ describe("ConsumptionPredictionChart", () => {
     expect((path.match(/M/g) ?? []).length).toBeGreaterThan(1);
   });
 });
+
+describe("ConsumptionPredictionChart · pontage des trous", () => {
+  it("relie la dernière valeur connue à la suivante", () => {
+    const { container } = render(
+      <ConsumptionPredictionChart points={POINTS} description="Graphique de test" />,
+    );
+
+    // Un seul « M » : le tracé ne s'interrompt pas, il traverse le trou.
+    const pontage = container.querySelector(".serie-pontage .recharts-line-curve");
+    const chemin = pontage?.getAttribute("d") ?? "";
+    expect((chemin.match(/M/g) ?? []).length).toBe(1);
+  });
+
+  it("se distingue de la mesure par un trait fin et atténué", () => {
+    const { container } = render(
+      <ConsumptionPredictionChart points={POINTS} description="Graphique de test" />,
+    );
+
+    // La forme porte la différence : combler avec le trait plein de la mesure
+    // aurait affirmé une continuité que personne n'a relevée.
+    const pontage = container.querySelector(".serie-pontage .recharts-line-curve");
+    expect(pontage?.getAttribute("stroke-dasharray")).toBe("2 4");
+    expect(pontage?.getAttribute("stroke-width")).toBe("1");
+    expect(pontage?.getAttribute("stroke-opacity")).toBe("0.45");
+  });
+
+});

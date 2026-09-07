@@ -95,3 +95,90 @@ describe("useSites", () => {
     expect(screen.getByTestId("count").textContent).toBe("0");
   });
 });
+
+describe("useSites · le site vit dans l'adresse", () => {
+  it("respecte le site nommé par l'adresse plutôt que le premier actif", async () => {
+    fetchSites.mockResolvedValue([
+      makeSite({ site_id: "SITE-001", status: "active" }),
+      makeSite({ site_id: "SITE-002", status: "active" }),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/?site=SITE-002"]}>
+        <Probe />
+      </MemoryRouter>,
+    );
+
+    // C'est ce qui permet de passer de la supervision au diagnostic sans
+    // perdre le site examiné, et de partager l'adresse telle quelle.
+    await waitFor(() => {
+      expect(screen.getByTestId("selected").textContent).toBe("SITE-002");
+    });
+  });
+
+  it("remplace un site d'adresse absent du référentiel", async () => {
+    fetchSites.mockResolvedValue([makeSite({ site_id: "SITE-001", status: "active" })]);
+
+    render(
+      <MemoryRouter initialEntries={["/?site=SITE-DISPARU"]}>
+        <Probe />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selected").textContent).toBe("SITE-001");
+    });
+  });
+
+  it("écrit le choix de l'utilisateur dans l'adresse", async () => {
+    fetchSites.mockResolvedValue([
+      makeSite({ site_id: "SITE-001", status: "active" }),
+      makeSite({ site_id: "SITE-003", status: "active" }),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/?site=SITE-001"]}>
+        <Probe />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("selected").textContent).toBe("SITE-001");
+    });
+
+    act(() => {
+      screen.getByRole("button", { name: "choisir" }).click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selected").textContent).toBe("SITE-003");
+    });
+  });
+
+  it("ne relit pas le référentiel quand le site change", async () => {
+    fetchSites.mockResolvedValue([
+      makeSite({ site_id: "SITE-001", status: "active" }),
+      makeSite({ site_id: "SITE-003", status: "active" }),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/?site=SITE-001"]}>
+        <Probe />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(fetchSites).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      screen.getByRole("button", { name: "choisir" }).click();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("selected").textContent).toBe("SITE-003");
+    });
+
+    // Changer de site est une navigation, pas un rechargement du référentiel :
+    // mêler la présélection à l'effet de chargement provoquait une requête de
+    // plus à chaque changement d'adresse.
+    expect(fetchSites).toHaveBeenCalledTimes(1);
+  });
+});

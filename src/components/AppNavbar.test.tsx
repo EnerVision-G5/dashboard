@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { AppNavbar } from "./AppNavbar";
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthContextValue } from "../auth/AuthContext";
-import { CONFIG_PATH, DASHBOARD_PATH } from "../routes/paths";
+import { CONFIG_PATH, DASHBOARD_PATH, DIAGNOSTIC_PATH } from "../routes/paths";
 
 const SESSION = {
   token: "entete.charge.signature",
@@ -62,6 +62,15 @@ describe("AppNavbar", () => {
     );
   });
 
+  it("donne accès au diagnostic, séparé de la supervision", () => {
+    renderNavbar();
+
+    // Onze cartes sur une page ne se lisaient pas : le diagnostic a son écran.
+    expect(screen.getByRole("link", { name: "Diagnostic" }).getAttribute("href")).toBe(
+      DIAGNOSTIC_PATH,
+    );
+  });
+
   it("affiche l'utilisateur connecté et son rôle", () => {
     renderNavbar();
 
@@ -108,6 +117,19 @@ describe("AppNavbar · page active", () => {
     // Le dashboard est servi sur « / », préfixe de toute autre adresse : sans
     // correspondance exacte, il resterait actif sur la page de configuration
     // et l'utilisateur ne saurait plus où il est.
+    expect(
+      screen.getByRole("link", { name: "Dashboard" }).getAttribute("aria-current"),
+    ).toBeNull();
+  });
+});
+
+describe("AppNavbar · page active sur le diagnostic", () => {
+  it("signale le diagnostic quand il est affiché", () => {
+    renderNavbar(DIAGNOSTIC_PATH);
+
+    expect(
+      screen.getByRole("link", { name: "Diagnostic" }).getAttribute("aria-current"),
+    ).toBe("page");
     expect(
       screen.getByRole("link", { name: "Dashboard" }).getAttribute("aria-current"),
     ).toBeNull();
