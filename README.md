@@ -276,6 +276,7 @@ souscrite et la localisation du site choisi, puis trois zones.
 | Fraîcheur et qualité | `GET /indicators` et `GET /sites/{id}/sensors`, rafraîchis toutes les 60 s | Servie |
 | Consommation temps réel | `GET /sites/{id}/readings/latest`, rafraîchi toutes les 30 s | Servie |
 | Recommandations | `GET /sites/{id}/recommendations`, rafraîchi toutes les 5 min | Servie |
+| Alertes actives | `GET /alerts`, rafraîchi toutes les 30 s | Servie |
 | Indicateurs | graphique consommation / prédiction d'EV-16 | Servi |
 | Diagnostics du site | `GET /sites/{id}/indicators` et `GET /sites/{id}/sensors/history`, rafraîchis toutes les 60 s | Servis |
 | Actions d'exploitation | `POST /simulations/spike/{id}` et `POST /sites/sync`, sur demande | Servies, **rôle `writer`** |
@@ -401,6 +402,41 @@ Le rafraîchissement est de **cinq minutes**, et non de trente secondes comme
 les mesures : les recommandations découlent des prévisions, qu'un job recalcule
 toutes les heures. Interroger plus souvent relirait le même raisonnement sur
 les mêmes prévisions.
+
+### Alertes actives
+
+**EV-17** affiche les alertes du site à côté des recommandations. Les deux
+partagent la même échelle de gravité — à dessein, dit le contrat — mais pas la
+même liste : une alerte **constate ce qui vient de se produire**, une
+recommandation **propose une action sur ce qui va se produire**. Les mêler
+obligerait le lecteur à distinguer, à chaque ligne, ce qu'il doit croire de ce
+qu'il doit faire.
+
+Deux propriétés de la route commandent l'affichage :
+
+- **le tri est fait côté écran.** `GET /alerts` sert un journal, du plus récent
+  au plus ancien : c'est l'ordre d'un historique, pas celui d'une liste
+  d'incidents à traiter. Le ticket demande un tri par gravité, et
+  `sortBySeverity` s'en charge — à gravité égale, la plus récente passe devant.
+  C'est l'inverse des recommandations, où l'ordre vient de l'API et n'est pas
+  retouché ;
+- **la lecture est bornée à la fenêtre de l'écran** (24 h). La source ne publie
+  que les alertes *actives* — une alerte résolue quitte sa réponse, au moment
+  précis où l'on cherche à l'expliquer — et l'API en conserve le journal. Sans
+  cette borne, un site ayant connu cent incidents en trois mois noierait celui
+  de cette nuit. La fenêtre glisse avec l'horloge à chaque rafraîchissement.
+
+Rafraîchissement toutes les **30 secondes** : une alerte n'a d'intérêt que si
+elle apparaît sans qu'on ait rechargé la page.
+
+`value` et `threshold` ne sont pas garantis par le contrat. Quand les deux sont
+servis, l'écart les rend lisibles d'un coup d'œil — « Relevé 812 kW · seuil
+500 kW » — et quand ils manquent, rien n'est inventé.
+
+> **Écart avec le ticket.** Il demande de consommer « l'endpoint alerts de
+> l'API Mock ». Le dashboard ne parle pas à la source, et n'en a plus besoin :
+> `GET /api/v1/alerts` est servi par l'API métier depuis le contrat 1.5.0. Le
+> ticket a été écrit quand cette route répondait encore 501.
 
 ### Mode dégradé des recommandations
 
