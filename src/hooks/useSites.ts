@@ -1,11 +1,21 @@
 /**
  * Chargement du référentiel des sites et mémorisation du site sélectionné.
  *
+ * **Le site choisi vit dans l'adresse**, sous `?site=`. Ce n'est pas un détail
+ * d'implémentation : le dashboard a maintenant deux écrans — supervision et
+ * diagnostic — et passer de l'un à l'autre ne doit pas perdre le site qu'on
+ * examine. L'URL est la seule source de vérité qui traverse une navigation,
+ * survit à un rechargement, et se partage par copier-coller à un collègue.
+ *
+ * Un contexte React aurait répondu au premier besoin seulement, au prix d'un
+ * état partagé de plus.
+ *
  * La requête est annulée si le composant est démonté avant la réponse, pour ne
  * pas écrire dans un état disparu.
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { Site } from "../api/sites";
 import { fetchSites, pickInitialSite } from "../api/sites";
 import { getApiClient } from "../api/clients";
@@ -22,9 +32,13 @@ export interface SitesState {
   error: string | null;
 }
 
+/** Nom du paramètre d'adresse portant le site examiné. */
+export const SITE_PARAM = "site";
+
 export function useSites(): SitesState {
   const [sites, setSites] = useState<Site[]>([]);
-  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedSiteId = searchParams.get(SITE_PARAM);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Compteur d'actualisation : l'incrémenter relance l'effet, ce qui est la
@@ -45,21 +59,11 @@ export function useSites(): SitesState {
           return;
         }
         setSites(loaded);
-        // Le choix de l'utilisateur survit à un rechargement : il n'est
-        // remplacé que si le site sélectionné a disparu du référentiel. Sans
-        // cette garde, une synchronisation ramènerait l'écran sur le premier
-        // site actif au milieu d'une consultation.
-        setSelectedSiteId((current) =>
-          current !== null && loaded.some((site) => site.site_id === current)
-            ? current
-            : (pickInitialSite(loaded)?.site_id ?? null),
-        );
       } catch (caught) {
         if (!active || isCancellation(caught)) {
           return;
         }
         setSites([]);
-        setSelectedSiteId(null);
         setError(caught instanceof Error ? caught.message : String(caught));
       } finally {
         if (active) {
@@ -76,9 +80,44 @@ export function useSites(): SitesState {
     };
   }, [refreshCount]);
 
-  const selectSite = useCallback((siteId: string) => {
-    setSelectedSiteId(siteId);
-  }, []);
+  useEffect(() => {
+    if (sites.length === 0) {
+      return;
+    }
+    if (selectedSiteId !== null && sites.some((site) => site.site_id === selectedSiteId)) {
+      return;
+    }
+    // L'adresse ne nomme aucun site, ou en nomme un qui a disparu du
+    // référentiel : on retombe sur le premier site actif. Sans cette garde,
+    // une synchronisation ramènerait l'écran sur ce premier site au milieu
+    // d'une consultation.
+    const initial = pickInitialSite(sites)?.site_id ?? null;
+    setSearchParams(
+      (params) => {
+        if (initial === null) {
+          params.delete(SITE_PARAM);
+        } else {
+          params.set(SITE_PARAM, initial);
+        }
+        return params;
+      },
+      // La présélection n'est pas une navigation : l'utilisateur n'a rien
+      // demandé, et le bouton retour ne doit pas l'y ramener.
+      { replace: true },
+    );
+  }, [sites, selectedSiteId, setSearchParams]);
+
+  const selectSite = useCallback(
+    (siteId: string) => {
+      // Un choix explicite, lui, entre dans l'historique : le bouton retour
+      // ramène au site précédemment consulté.
+      setSearchParams((params) => {
+        params.set(SITE_PARAM, siteId);
+        return params;
+      });
+    },
+    [setSearchParams],
+  );
 
   const reload = useCallback(() => {
     setRefreshCount((count) => count + 1);

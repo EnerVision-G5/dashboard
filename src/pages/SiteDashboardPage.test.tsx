@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { SiteDashboardPage } from "./SiteDashboardPage";
 import { ApiError } from "../api/http";
 import { AuthContext } from "../auth/AuthContext";
@@ -20,7 +21,6 @@ import {
   makeReading,
   makeRecommendations,
   makeSpikeSimulation,
-  makeSensorFailure,
   makeSensorHealth,
   makeSite,
   makeSiteIndicators,
@@ -130,10 +130,14 @@ function renderPage({ role = "reader" as "reader" | "writer" } = {}) {
     signIn: vi.fn().mockResolvedValue(true),
     signOut,
   };
+  // Le site examiné vit dans l'adresse (?site=) depuis la séparation
+  // supervision / diagnostic : la page a donc besoin d'un routeur.
   render(
-    <AuthContext value={value}>
-      <SiteDashboardPage />
-    </AuthContext>,
+    <MemoryRouter>
+      <AuthContext value={value}>
+        <SiteDashboardPage />
+      </AuthContext>
+    </MemoryRouter>,
   );
   return { signOut };
 }
@@ -467,106 +471,6 @@ describe("SiteDashboardPage · bandeau de fraîcheur et de qualité (EV-18)", ()
   });
 });
 
-describe("SiteDashboardPage · diagnostics du site (EV-52)", () => {
-  it("affiche les trois panneaux de diagnostic sous la maquette", async () => {
-    renderPage();
-
-    expect(
-      await screen.findByRole("heading", { name: "Ingestion des mesures", level: 2 }),
-    ).toBeDefined();
-    expect(
-      screen.getByRole("heading", { name: "Écart prédiction / réel", level: 2 }),
-    ).toBeDefined();
-    expect(
-      screen.getByRole("heading", {
-        name: "Mesures écartées et pannes de capteur",
-        level: 2,
-      }),
-    ).toBeDefined();
-  });
-
-  it("passe au panneau temps réel le seuil de retard de l'API", async () => {
-    // Mesure vieille de trois minutes, seuil de l'API à cinq : le panneau ne
-    // doit pas annoncer de retard, alors que son seuil interne de deux minutes
-    // l'aurait fait.
-    fetchLatestReading.mockResolvedValue(
-      makeReading({ site_id: "SITE-001", timestamp: new Date(Date.now() - 180_000).toISOString() }),
-    );
-
-    renderPage();
-
-    await screen.findByRole("heading", { name: "Ingestion des mesures", level: 2 });
-    expect(screen.queryByText(/l'ingestion est en retard/)).toBeNull();
-  });
-
-  it("résume les mesures écartées de la fenêtre affichée", async () => {
-    fetchReadings.mockResolvedValue([
-      makeReading({ site_id: "SITE-001", timestamp: "2026-09-02T00:00:00Z" }),
-      makeReading({
-        site_id: "SITE-001",
-        timestamp: "2026-09-02T00:01:00Z",
-        excluded: true,
-        exclusion_reason: "temperature_sensor_failure",
-      }),
-    ]);
-
-    renderPage();
-
-    // Le graphique de qualité d'EV-19 affiche aussi des chiffres seuls : on
-    // compte le total dans le panneau qui en parle.
-    expect(
-      await screen.findByText("1 × temperature_sensor_failure"),
-    ).toBeDefined();
-    const panneau = screen.getByRole("region", {
-      name: "Mesures écartées et pannes de capteur",
-    });
-    expect(within(panneau).getByText("1")).toBeDefined();
-  });
-
-  it("affiche l'historique des pannes du site affiché", async () => {
-    fetchSensorHistory.mockResolvedValue([
-      makeSensorFailure({ capteur: "network", ended_at: null, ongoing: true }),
-    ]);
-
-    renderPage();
-
-    expect(await screen.findByText("Capteur réseau")).toBeDefined();
-    expect(screen.getByText(/panne en cours/)).toBeDefined();
-  });
-
-  it("suit le site choisi pour ses diagnostics", async () => {
-    renderPage();
-    await screen.findByRole("heading", { name: "Ingestion des mesures", level: 2 });
-
-    fireEvent.change(screen.getByLabelText("Site"), { target: { value: "SITE-002" } });
-
-    await waitFor(() => {
-      expect(fetchSiteIndicators).toHaveBeenLastCalledWith(
-        expect.objectContaining({ siteId: "SITE-002" }),
-      );
-    });
-    expect(fetchSensorHistory).toHaveBeenLastCalledWith(
-      expect.anything(),
-      "SITE-002",
-      expect.anything(),
-    );
-  });
-
-  it("garde les mesures affichées quand les diagnostics échouent", async () => {
-    fetchSiteIndicators.mockRejectedValue(
-      new ApiError("L'API métier est injoignable.", null),
-    );
-
-    renderPage();
-
-    expect(await screen.findByText("Consommation réelle (kW)")).toBeDefined();
-    const alerts = await screen.findAllByRole("alert");
-    expect(
-      alerts.some((alert) => alert.textContent?.includes("État de l'ingestion indisponible")),
-    ).toBe(true);
-  });
-});
-
 describe("SiteDashboardPage · recommandations (EV-54)", () => {
   it("remplit la zone Recommandations avec les actions de l'API", async () => {
     renderPage();
@@ -622,81 +526,6 @@ describe("SiteDashboardPage · recommandations (EV-54)", () => {
     expect(
       await screen.findByText("Aucune prévision archivée sur l'horizon demandé."),
     ).toBeDefined();
-  });
-});
-
-describe("SiteDashboardPage · commandes et historiques", () => {
-  it("affiche l'historique des pics et le registre des modèles", async () => {
-    renderPage();
-
-    expect(
-      await screen.findByRole("heading", { name: "Historique des pics de charge", level: 2 }),
-    ).toBeDefined();
-    expect(screen.getByRole("heading", { name: "Modèles", level: 2 })).toBeDefined();
-    expect(await screen.findByText("enervision_xgboost · 3")).toBeDefined();
-  });
-
-  it("ne propose aucune commande à un rôle lecteur", async () => {
-    renderPage();
-
-    await screen.findByRole("heading", { name: "Actions d'exploitation", level: 2 });
-    expect(screen.queryByRole("button", { name: /Déclencher un pic/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Recharger les sites" })).toBeNull();
-    expect(
-      screen.getByText("Le rôle reader ne permet pas d'agir sur la source."),
-    ).toBeDefined();
-  });
-
-  it("relit l'historique des pics après un déclenchement", async () => {
-    renderPage({ role: "writer" });
-    await screen.findByRole("button", { name: /Déclencher un pic/ });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Déclencher un pic/ }));
-    });
-
-    expect(triggerSpike).toHaveBeenCalledWith(
-      expect.objectContaining({ siteId: "SITE-001" }),
-    );
-    // Deux lectures : le montage, puis celle que le déclenchement provoque.
-    await waitFor(() => {
-      expect(fetchSpikes).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  it("relit le référentiel après une synchronisation", async () => {
-    renderPage({ role: "writer" });
-    await screen.findByRole("button", { name: "Recharger les sites" });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Recharger les sites" }));
-    });
-
-    expect(syncSites).toHaveBeenCalled();
-    await waitFor(() => {
-      expect(fetchSites).toHaveBeenCalledTimes(2);
-    });
-    expect(
-      screen.getByText("7 site(s) synchronisé(s) sur 7 annoncé(s) par la source"),
-    ).toBeDefined();
-  });
-
-  it("nomme le refus quand la source rejette le pic", async () => {
-    triggerSpike.mockRejectedValue(
-      new ApiError("L'API métier a renvoyé une erreur serveur (502).", 502),
-    );
-
-    renderPage({ role: "writer" });
-    await screen.findByRole("button", { name: /Déclencher un pic/ });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Déclencher un pic/ }));
-    });
-
-    const alerts = await screen.findAllByRole("alert");
-    expect(
-      alerts.some((alert) => alert.textContent?.includes("Commande refusée")),
-    ).toBe(true);
   });
 });
 
@@ -845,5 +674,25 @@ describe("SiteDashboardPage · alertes actives (EV-17)", () => {
     expect(
       alerts.some((zone) => zone.textContent?.includes("Alertes indisponibles")),
     ).toBe(true);
+  });
+});
+
+describe("SiteDashboardPage · seuil de fraîcheur", () => {
+  it("passe au panneau temps réel le seuil de retard de l'API", async () => {
+    // Mesure vieille de trois minutes, seuil de l'API à cinq : le panneau ne
+    // doit pas annoncer de retard, alors que son seuil interne de deux minutes
+    // l'aurait fait.
+    fetchLatestReading.mockResolvedValue(
+      makeReading({
+        site_id: "SITE-001",
+        consumption_kw: 2654,
+        timestamp: new Date(Date.now() - 180_000).toISOString(),
+      }),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("2 654 kW")).toBeDefined();
+    expect(screen.queryByText(/l'ingestion est en retard/)).toBeNull();
   });
 });

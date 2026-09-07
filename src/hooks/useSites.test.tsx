@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { useSites } from "./useSites";
 import { ApiError } from "../api/http";
 import { makeSite } from "../test/doubles";
@@ -40,14 +41,21 @@ describe("useSites", () => {
       makeSite({ site_id: "SITE-002", status: "active" }),
     ]);
 
-    render(<Probe />);
+    render(
+      <MemoryRouter>
+        <Probe />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByTestId("state").textContent).toBe("loading");
     await waitFor(() => {
       expect(screen.getByTestId("state").textContent).toBe("ready");
     });
     expect(screen.getByTestId("count").textContent).toBe("2");
-    expect(screen.getByTestId("selected").textContent).toBe("SITE-002");
+    // La présélection écrit dans l'adresse, donc au cycle de rendu suivant.
+    await waitFor(() => {
+      expect(screen.getByTestId("selected").textContent).toBe("SITE-002");
+    });
   });
 
   it("n'écrase pas le choix de l'utilisateur après la sélection initiale", async () => {
@@ -56,7 +64,11 @@ describe("useSites", () => {
       makeSite({ site_id: "SITE-003", status: "active" }),
     ]);
 
-    render(<Probe />);
+    render(
+      <MemoryRouter>
+        <Probe />
+      </MemoryRouter>,
+    );
     await waitFor(() => {
       expect(screen.getByTestId("selected").textContent).toBe("SITE-002");
     });
@@ -71,7 +83,11 @@ describe("useSites", () => {
   it("expose le message d'erreur de l'API sans inventer de sites", async () => {
     fetchSites.mockRejectedValue(new ApiError("L'API métier est injoignable.", null));
 
-    render(<Probe />);
+    render(
+      <MemoryRouter>
+        <Probe />
+      </MemoryRouter>,
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId("state").textContent).toBe("L'API métier est injoignable.");
