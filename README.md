@@ -318,6 +318,13 @@ Le graphique, lui, occupe **toute la largeur** : c'est la pièce qui a le plus
 besoin de place, et une courbe de 1 440 points dans une demi-grille ne se lit
 pas.
 
+L'**en-tête de site est collé en haut** () : l'écran reste long, et le
+site affiché est le contexte de tout ce qu'on lit en dessous. Sans lui sous les
+yeux, on descend dans les alertes ou les diagnostics sans plus savoir de quel
+site ils parlent, et changer de site imposait de remonter. Attention si la mise
+en page du layout évolue : un ancêtre en  autre que 
+annulerait le collage.
+
 La mise en page suit la maquette « Smart Energy Optimiser » : sous la barre de
 navigation, un en-tête portant le sélecteur de site et — à droite — la puissance
 souscrite et la localisation du site choisi, puis trois zones.

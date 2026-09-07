@@ -135,7 +135,15 @@ export function SiteDashboardPage() {
 
   return (
     <>
-      <header className="border-b border-ardoise-200 bg-white">
+      {/* En-tête collé en haut : l'écran est long, et le site affiché est le
+          contexte de tout ce qu'on lit en dessous. Sans lui sous les yeux, on
+          descend dans les alertes ou les diagnostics sans plus savoir de quel
+          site ils parlent — et changer de site imposait de remonter.
+
+          Le fond doit rester opaque (`bg-white`) : le contenu défile dessous.
+          Un ancêtre en `overflow` autre que `visible` annulerait le collage,
+          d'où la vigilance à garder si la mise en page du layout évolue. */}
+      <header className="sticky top-0 z-20 border-b border-ardoise-200 bg-white shadow-surface">
         <div className="mx-auto max-w-7xl">
           <div className="flex flex-col gap-4 px-4 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
             {/* Le sélecteur ne s'étire pas indéfiniment sur un grand écran :
