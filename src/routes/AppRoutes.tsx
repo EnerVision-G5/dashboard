@@ -11,8 +11,15 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ConfigPage } from "../pages/ConfigPage";
 import { LoginPage } from "../pages/LoginPage";
 import { SiteDashboardPage } from "../pages/SiteDashboardPage";
+import { SiteDiagnosticPage } from "../pages/SiteDiagnosticPage";
 import { AuthenticatedLayout } from "./AuthenticatedLayout";
-import { CONFIG_PATH, DASHBOARD_PATH, DESIGN_SYSTEM_PATH, LOGIN_PATH } from "./paths";
+import {
+  CONFIG_PATH,
+  DASHBOARD_PATH,
+  DESIGN_SYSTEM_PATH,
+  DIAGNOSTIC_PATH,
+  LOGIN_PATH,
+} from "./paths";
 import { useAuth } from "../auth/useAuth";
 
 /**
@@ -59,6 +66,7 @@ export function AppRoutes() {
           ajouté ici hérite des deux sans rien avoir à déclarer (EV-50). */}
       <Route element={<AuthenticatedLayout />}>
         <Route path={DASHBOARD_PATH} element={<SiteDashboardPage />} />
+        <Route path={DIAGNOSTIC_PATH} element={<SiteDiagnosticPage />} />
         <Route path={CONFIG_PATH} element={<ConfigPage />} />
       </Route>
       {/* Démonstration du design system : jamais servie en production, et

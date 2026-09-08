@@ -19,6 +19,7 @@
 import type { SensorFailure, SensorName } from "../api/sensors";
 import type { ExclusionSummary } from "../lib/series";
 import { Card } from "../ui/Card";
+import { ScrollArea } from "../ui/ScrollArea";
 import { EmptyState, ErrorState, LoadingState } from "../ui/states";
 
 interface ExcludedMeasuresPanelProps {
@@ -149,14 +150,21 @@ export function ExcludedMeasuresPanel({
               <EmptyState>Aucune panne de capteur enregistrée pour ce site.</EmptyState>
             </div>
           ) : (
-            <ul className="mt-1 text-corps">
-              {failures.map((failure) => (
-                <Failure
-                  key={`${failure.capteur}-${failure.started_at}`}
-                  failure={failure}
-                />
-              ))}
-            </ul>
+            <>
+              <p className="mt-1 text-corps text-ardoise-600">
+                {failures.length} épisode(s), le plus récent d'abord.
+              </p>
+              <ScrollArea label="Historique des pannes de capteur" height="courte">
+                <ul className="text-corps pr-2">
+                  {failures.map((failure) => (
+                    <Failure
+                      key={`${failure.capteur}-${failure.started_at}`}
+                      failure={failure}
+                    />
+                  ))}
+                </ul>
+              </ScrollArea>
+            </>
           )}
         </>
       )}

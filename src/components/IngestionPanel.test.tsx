@@ -156,3 +156,46 @@ describe("IngestionPanel", () => {
     expect(screen.getByText("12")).toBeDefined();
   });
 });
+
+describe("IngestionPanel · densité (EV-56)", () => {
+  const COLLECTEUR = {
+    last_attempt_at: "2026-09-02T11:59:30Z",
+    last_success_at: "2026-09-02T11:59:30Z",
+    last_rows: 7,
+    last_data_lag_seconds: 12,
+    consecutive_failures: 0,
+    last_error: null,
+    source: "poller" as const,
+  };
+
+  it("replie l'état du collecteur, qui est un détail de diagnostic", () => {
+    render(
+      <IngestionPanel
+        ingestion={{ ...FRAIS, collector: COLLECTEUR }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    const bloc = screen.getByRole("group");
+    expect(bloc.hasAttribute("open")).toBe(false);
+    // Replié n'est pas absent : le contenu reste lisible et cherchable.
+    expect(screen.getByText("Lignes au dernier essai abouti")).toBeDefined();
+  });
+
+  it("l'ouvre d'emblée quand le collecteur échoue", () => {
+    render(
+      <IngestionPanel
+        ingestion={{
+          ...FRAIS,
+          collector: { ...COLLECTEUR, consecutive_failures: 12, last_error: "timeout" },
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    // C'est alors l'information la plus utile de la carte.
+    expect(screen.getByRole("group").hasAttribute("open")).toBe(true);
+  });
+});

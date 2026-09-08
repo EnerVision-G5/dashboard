@@ -18,6 +18,7 @@
 
 import type { Alert, AlertSeverity, AlertType } from "../api/alerts";
 import { Card } from "../ui/Card";
+import { ScrollArea } from "../ui/ScrollArea";
 import { EmptyState, ErrorState, LoadingState } from "../ui/states";
 
 interface AlertsPanelProps {
@@ -135,11 +136,20 @@ export function AlertsPanel({ alerts, isLoading, error, windowHours }: AlertsPan
       )}
 
       {!isLoading && error === null && alerts.length > 0 && (
-        <ul className="flex flex-col gap-2">
-          {alerts.map((alert) => (
-            <Item key={alert.alert_id} alert={alert} />
-          ))}
-        </ul>
+        <>
+          {/* Le compte reste hors de la zone : savoir combien d'alertes
+              attendent ne doit pas exiger de faire défiler. */}
+          <p className="mb-2 text-corps text-ardoise-600">
+            {alerts.length} alerte(s), les plus graves d'abord.
+          </p>
+          <ScrollArea label="Liste des alertes" height="haute">
+            <ul className="flex flex-col gap-2 pr-2">
+              {alerts.map((alert) => (
+                <Item key={alert.alert_id} alert={alert} />
+              ))}
+            </ul>
+          </ScrollArea>
+        </>
       )}
     </Card>
   );

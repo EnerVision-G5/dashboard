@@ -13,6 +13,7 @@
 
 import type { SpikeSimulation } from "../api/simulations";
 import { Card } from "../ui/Card";
+import { ScrollArea } from "../ui/ScrollArea";
 import { EmptyState, ErrorState, LoadingState } from "../ui/states";
 
 interface SpikeHistoryPanelProps {
@@ -80,11 +81,13 @@ export function SpikeHistoryPanel({ spikes, isLoading, error }: SpikeHistoryPane
       )}
 
       {!isLoading && error === null && spikes.length > 0 && (
-        <ul className="text-corps">
-          {spikes.map((spike) => (
-            <Spike key={spike.simulation_id} spike={spike} />
-          ))}
-        </ul>
+        <ScrollArea label="Historique des pics simulés" height="courte">
+          <ul className="text-corps pr-2">
+            {spikes.map((spike) => (
+              <Spike key={spike.simulation_id} spike={spike} />
+            ))}
+          </ul>
+        </ScrollArea>
       )}
     </Card>
   );

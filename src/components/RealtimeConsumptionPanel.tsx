@@ -32,6 +32,15 @@ interface RealtimeConsumptionPanelProps {
    * par se contredire.
    */
   staleThresholdSeconds?: number;
+  /**
+   * Disposition des tuiles.
+   *
+   * `bande` range les cinq valeurs sur une ligne, pour la pleine largeur de
+   * l'écran de supervision : ce sont cinq nombres courts, et les empiler dans
+   * une colonne d'un tiers de largeur occupait une hauteur d'écran pour rien.
+   * `colonne` garde la disposition de la maquette d'origine.
+   */
+  layout?: "bande" | "colonne";
 }
 
 /** Grandeurs secondaires, dans l'ordre de la maquette. */
@@ -109,7 +118,9 @@ export function RealtimeConsumptionPanel({
   error,
   now,
   staleThresholdSeconds,
+  layout = "colonne",
 }: RealtimeConsumptionPanelProps) {
+  const enBande = layout === "bande";
   return (
     <Card title="Consommation temps réel">
       {isLoading && <LoadingState>Chargement de la dernière mesure…</LoadingState>}
@@ -124,22 +135,39 @@ export function RealtimeConsumptionPanel({
 
       {!isLoading && error === null && reading !== null && (
         <>
-          <div className="flex flex-col gap-3">
-            <MetricTile
-              label="Consommation"
-              value={reading.consumption_kw}
-              unit="kW"
-              digits={0}
-              emphasis="principal"
-            />
-            {/* Deux colonnes dès qu'il y a la place : sur un téléphone, quatre
-                tuiles côte à côte deviennent illisibles. */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {enBande ? (
+            // Cinq tuiles sur une ligne dès qu'il y a la place ; deux par
+            // ligne sur un téléphone, où cinq deviendraient illisibles.
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <MetricTile
+                label="Consommation"
+                value={reading.consumption_kw}
+                unit="kW"
+                digits={0}
+                emphasis="principal"
+              />
               {secondaryMetrics(reading).map((metric) => (
                 <MetricTile key={metric.label} {...metric} />
               ))}
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <MetricTile
+                label="Consommation"
+                value={reading.consumption_kw}
+                unit="kW"
+                digits={0}
+                emphasis="principal"
+              />
+              {/* Deux colonnes dès qu'il y a la place : sur un téléphone,
+                  quatre tuiles côte à côte deviennent illisibles. */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {secondaryMetrics(reading).map((metric) => (
+                  <MetricTile key={metric.label} {...metric} />
+                ))}
+              </div>
+            </div>
+          )}
           <Notes
             reading={reading}
             now={now}

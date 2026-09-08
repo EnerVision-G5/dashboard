@@ -210,3 +210,44 @@ describe("RealtimeConsumptionPanel · contrat 1.5.0 (EV-52)", () => {
     expect(screen.queryByText(/écartée des calculs agrégés/)).toBeNull();
   });
 });
+
+describe("RealtimeConsumptionPanel · disposition en bande", () => {
+  it("range les cinq valeurs sur une ligne", () => {
+    const { container } = render(
+      <RealtimeConsumptionPanel
+        reading={makeReading()}
+        isLoading={false}
+        error={null}
+        layout="bande"
+      />,
+    );
+
+    // Empilées dans une colonne d'un tiers de largeur, ces cinq valeurs
+    // occupaient une hauteur d'écran pour rien.
+    const grille = container.querySelector('[class*="grid-cols-5"]');
+    expect(grille).not.toBeNull();
+    expect(grille?.children).toHaveLength(5);
+  });
+
+  it("garde la disposition en colonne par défaut", () => {
+    const { container } = render(
+      <RealtimeConsumptionPanel reading={makeReading()} isLoading={false} error={null} />,
+    );
+
+    expect(container.querySelector('[class*="grid-cols-5"]')).toBeNull();
+  });
+
+  it("affiche les mêmes valeurs dans les deux dispositions", () => {
+    render(
+      <RealtimeConsumptionPanel
+        reading={makeReading({ consumption_kw: 157, voltage_v: 399.4 })}
+        isLoading={false}
+        error={null}
+        layout="bande"
+      />,
+    );
+
+    expect(screen.getByText("157 kW")).toBeDefined();
+    expect(screen.getByText("399,4 V")).toBeDefined();
+  });
+});

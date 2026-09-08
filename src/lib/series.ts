@@ -16,6 +16,8 @@
 
 import type { EnergyReading } from "../api/readings";
 import type { PredictionPoint } from "../api/predictions";
+import type { MeasureKey } from "./measures";
+import { MEASURES, readMeasure } from "./measures";
 
 /** Point de la série affichée, tous champs optionnels résolus à `null`. */
 export interface ChartPoint {
@@ -23,8 +25,23 @@ export interface ChartPoint {
   timestamp: number;
   /** Horodatage d'origine, ISO 8601 UTC. */
   isoTimestamp: string;
-  /** Consommation réellement mesurée, `null` si la source ne l'a pas fournie. */
+  /**
+   * Consommation réellement mesurée, `null` si la source ne l'a pas fournie.
+   *
+   * Doublon assumé de `values.consumption` : c'est la série principale, lue par
+   * le compteur de mesures absentes, l'infobulle et la répartition de qualité.
+   * La renommer partout n'apporterait rien qu'un risque.
+   */
   actualKw: number | null;
+  /**
+   * Toutes les grandeurs de la mesure, par clé.
+   *
+   * Le graphique peut tracer autre chose que la consommation : tension,
+   * intensité, température, humidité, facteur de puissance. Les transporter
+   * ici évite de recharger les mesures à chaque changement de grandeur — elles
+   * sont déjà en mémoire.
+   */
+  values: Record<MeasureKey, number | null>;
   /** Consommation prédite par le service d'inférence. */
   predictedKw: number | null;
   /** Valeur reconstituée par l'ETL, affichée en information seulement. */
@@ -43,11 +60,20 @@ export interface ChartPoint {
   upperBoundKw: number | null;
 }
 
+/** Grandeurs toutes absentes : l'état d'un point qu'aucune mesure ne renseigne. */
+function emptyValues(): Record<MeasureKey, number | null> {
+  return Object.fromEntries(MEASURES.map((measure) => [measure.key, null])) as Record<
+    MeasureKey,
+    number | null
+  >;
+}
+
 function emptyPoint(isoTimestamp: string, timestamp: number): ChartPoint {
   return {
     timestamp,
     isoTimestamp,
     actualKw: null,
+    values: emptyValues(),
     predictedKw: null,
     imputedKw: null,
     dataQuality: null,
@@ -91,6 +117,9 @@ export function buildChartSeries(
       continue;
     }
     point.actualKw = reading.consumption_kw;
+    for (const measure of MEASURES) {
+      point.values[measure.key] = readMeasure(reading, measure);
+    }
     point.imputedKw = reading.consumption_kw_imputed;
     point.dataQuality = reading.data_quality;
     point.imputationMethod = reading.imputation_method;
@@ -117,6 +146,69 @@ export function buildChartSeries(
 /** Nombre de mesures dont la consommation réelle est absente. */
 export function countMissingReadings(points: readonly ChartPoint[]): number {
   return points.filter((point) => point.dataQuality !== null && point.actualKw === null).length;
+}
+
+/**
+ * Marge laissée au-dessus et au-dessous des valeurs, en part de leur amplitude.
+ *
+ * Sans elle, la courbe touche les bords du cadre et les extremums se
+ * confondent avec l'axe.
+ */
+const VALUE_MARGIN_RATIO = 0.15;
+
+/**
+ * Bornes verticales calculées sur les valeurs réellement tracées.
+ *
+ * Recharts part de zéro par défaut. Sur un site dont la consommation oscille
+ * entre 140 et 200 kW, les quatre cinquièmes du cadre servent alors à montrer
+ * un vide, et les variations — c'est-à-dire l'information — s'aplatissent en
+ * une ligne droite.
+ *
+ * Le compromis est connu : **un axe qui ne part pas de zéro amplifie
+ * visuellement les écarts**. C'est le bon choix pour de la supervision, où l'on
+ * cherche la variation et non la proportion, et l'axe reste gradué en
+ * kilowatts, donc lisible sans être deviné.
+ *
+ * Rendre `auto` plutôt qu'un couple de nombres quand rien n'est tracé : une
+ * fenêtre sans mesure ne doit pas produire un domaine inventé.
+ */
+export function valueDomain(
+  points: readonly ChartPoint[],
+  measure: MeasureKey = "consumption",
+): [number, number] | ["auto", "auto"] {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  // La prédiction ne concerne que la consommation : sur une autre grandeur,
+  // l'inclure au domaine l'écraserait avec des kilowatts.
+  const avecPrediction = measure === "consumption";
+
+  // Une boucle plutôt qu'un spread dans `Math.min` : une fenêtre profonde peut
+  // porter des dizaines de milliers de points, au-delà de ce qu'un appel de
+  // fonction accepte d'arguments.
+  for (const point of points) {
+    const valeurs = avecPrediction
+      ? [point.values[measure], point.predictedKw]
+      : [point.values[measure]];
+    for (const valeur of valeurs) {
+      if (valeur === null) {
+        continue;
+      }
+      min = Math.min(min, valeur);
+      max = Math.max(max, valeur);
+    }
+  }
+
+  if (min === Number.POSITIVE_INFINITY) {
+    return ["auto", "auto"];
+  }
+  // Série plate : une amplitude nulle donnerait un domaine dégénéré, que
+  // Recharts rend par un axe sans graduation.
+  if (min === max) {
+    return [Math.floor(min - 1), Math.ceil(max + 1)];
+  }
+
+  const marge = (max - min) * VALUE_MARGIN_RATIO;
+  return [Math.floor(min - marge), Math.ceil(max + marge)];
 }
 
 /** Répartition des mesures d'une fenêtre par qualification de la source. */
