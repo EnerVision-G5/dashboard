@@ -4,6 +4,7 @@ import {
   buildChartSeries,
   countByQuality,
   countMissingReadings,
+  nearestPredictionAt,
   summarizeExclusions,
   valueDomain,
 } from "./series";
@@ -369,5 +370,83 @@ describe("valueDomain · par grandeur", () => {
 
     const [, max] = valueDomain(points, "voltage") as [number, number];
     expect(max).toBeLessThan(500);
+  });
+});
+describe("nearestPredictionAt", () => {
+  /**
+   * Ce que l'API sert vraiment : des mesures à la minute, une prévision par
+   * heure, et aucun horodatage commun entre les deux séries.
+   */
+  const SERIE = buildChartSeries(
+    Array.from({ length: 180 }, (_, minute) =>
+      makeReading({
+        timestamp: new Date(Date.UTC(2026, 8, 8, 11, minute, 3)).toISOString(),
+        consumption_kw: 150,
+      }),
+    ),
+    [
+      makePredictionPoint({
+        timestamp: "2026-09-08T12:00:00Z",
+        predicted_consumption_kw: 220,
+      }),
+      makePredictionPoint({
+        timestamp: "2026-09-08T13:00:00Z",
+        predicted_consumption_kw: 240,
+      }),
+    ],
+  );
+
+  const instant = (heure: number, minute: number) =>
+    Date.UTC(2026, 8, 8, heure, minute, 3);
+
+  it("rattache une mesure à la prévision de l'heure suivante", () => {
+    // Le cas signalé : la courbe prédite passe visiblement au-dessus de la
+    // mesure survolée, mais aucun point ne porte les deux valeurs.
+    expect(nearestPredictionAt(SERIE, instant(11, 59))).toEqual({
+      value: 220,
+      at: "2026-09-08T12:00:00Z",
+    });
+  });
+
+  it("rattache une mesure à la prévision de l'heure précédente", () => {
+    expect(nearestPredictionAt(SERIE, instant(12, 20))).toEqual({
+      value: 220,
+      at: "2026-09-08T12:00:00Z",
+    });
+  });
+
+  it("retient la plus proche quand deux prévisions encadrent l'instant", () => {
+    expect(nearestPredictionAt(SERIE, instant(12, 40))?.value).toBe(240);
+  });
+
+  it("ne rattache rien au-delà d'un demi-pas", () => {
+    // 11 h 20 est à quarante minutes de la seule prévision voisine : la
+    // rapprocher reviendrait à comparer une mesure à la prévision d'une autre
+    // heure.
+    expect(nearestPredictionAt(SERIE, instant(11, 20))).toBeNull();
+  });
+
+  it("accepte une tolérance explicite", () => {
+    expect(nearestPredictionAt(SERIE, instant(11, 20), 60 * 60 * 1000)?.value).toBe(220);
+  });
+
+  it("rend la prévision elle-même quand l'instant est un point prédit", () => {
+    expect(nearestPredictionAt(SERIE, Date.UTC(2026, 8, 8, 13, 0, 0))).toEqual({
+      value: 240,
+      at: "2026-09-08T13:00:00Z",
+    });
+  });
+
+  it("rend null sur une série sans aucune prévision", () => {
+    const sansPrevision = buildChartSeries(
+      [makeReading({ timestamp: "2026-09-08T11:00:03Z", consumption_kw: 150 })],
+      [],
+    );
+
+    expect(nearestPredictionAt(sansPrevision, instant(11, 0))).toBeNull();
+  });
+
+  it("rend null sur une série vide", () => {
+    expect(nearestPredictionAt([], instant(11, 0))).toBeNull();
   });
 });

@@ -211,6 +211,102 @@ export function valueDomain(
   return [Math.floor(min - marge), Math.ceil(max + marge)];
 }
 
+/** Une prévision et l'instant qu'elle décrit. */
+export interface NearbyPrediction {
+  /** Valeur prévue, en kilowatts. */
+  value: number;
+  /** Horodatage du point de prévision, ISO 8601. */
+  at: string;
+}
+
+/**
+ * Pas de la série de prévision, en millisecondes : le job produit un point par
+ * heure.
+ */
+const PREDICTION_STEP_MS = 60 * 60 * 1000;
+
+/**
+ * Écart maximal toléré entre l'instant regardé et la prévision rapprochée.
+ *
+ * Une demi-heure, soit un demi-pas : au-delà, la prévision la plus proche
+ * n'est plus « celle de ce moment-là », et l'afficher rattacherait une mesure
+ * de 14 h à une prévision de 15 h. Un demi-pas garantit aussi qu'une seule
+ * prévision peut être candidate.
+ */
+const NEAR_PREDICTION_MS = PREDICTION_STEP_MS / 2;
+
+/**
+ * Prévision décrivant un instant donné, si elle existe.
+ *
+ * Les deux séries n'ont pas le même pas — mesures à la minute, prévisions à
+ * l'heure — et **aucun de leurs horodatages ne coïncide**. Un point de la
+ * série fusionnée porte donc l'une ou l'autre, jamais les deux : l'infobulle
+ * du graphique n'avait rien à montrer côté prévision quand on survolait une
+ * mesure, alors que la courbe prédite passait visiblement au-dessus.
+ *
+ * La prévision retenue est la **plus proche dans le temps**, pas la dernière
+ * antérieure : le graphique relie les points prédits par une courbe continue,
+ * et le lecteur qui pointe une mesure à 12 h 59 compare ce qu'il voit à la
+ * prévision de 13 h qui passe à cet endroit. Rien n'est interpolé — la valeur
+ * affichée est celle que le modèle a réellement produite, et l'infobulle en
+ * rappelle l'heure dès qu'elle diffère de l'instant survolé.
+ *
+ * Dichotomie puis balayage borné : l'infobulle est recalculée à chaque
+ * déplacement de la souris, sur des séries qui portent des milliers de points.
+ */
+export function nearestPredictionAt(
+  points: readonly ChartPoint[],
+  timestamp: number,
+  toleranceMs: number = NEAR_PREDICTION_MS,
+): NearbyPrediction | null {
+  // Dichotomie sur les horodatages, croissants par construction, pour situer
+  // l'instant regardé dans la série. `bas` s'arrête juste après le dernier
+  // point qui le précède.
+  let bas = 0;
+  let haut = points.length - 1;
+  while (bas <= haut) {
+    const milieu = (bas + haut) >> 1;
+    if (points[milieu].timestamp <= timestamp) {
+      bas = milieu + 1;
+    } else {
+      haut = milieu - 1;
+    }
+  }
+
+  // Puis on s'écarte de part et d'autre jusqu'au premier point qui porte une
+  // prévision. La dichotomie ne peut pas s'en charger : les points prédits
+  // sont une poignée noyée dans des milliers de mesures, et rien ne garantit
+  // qu'elle en traverse un. Chaque balayage s'arrête dès qu'il dépasse la
+  // tolérance, ce qui le borne quelle que soit la longueur de la série.
+  const trouver = (depart: number, pas: number): ChartPoint | null => {
+    for (let index = depart; index >= 0 && index < points.length; index += pas) {
+      const point = points[index];
+      if (Math.abs(point.timestamp - timestamp) > toleranceMs) {
+        return null;
+      }
+      if (point.predictedKw !== null) {
+        return point;
+      }
+    }
+    return null;
+  };
+
+  const avant = trouver(bas - 1, -1);
+  const apres = trouver(bas, 1);
+  const candidat =
+    avant === null || apres === null
+      ? (avant ?? apres)
+      : timestamp - avant.timestamp <= apres.timestamp - timestamp
+        ? avant
+        : apres;
+
+  // Redondant avec le balayage, mais c'est le seul endroit où la contrainte
+  // est écrite : le compilateur ne sait pas que `predictedKw` est non nul.
+  if (candidat === null || candidat.predictedKw === null) {
+    return null;
+  }
+  return { value: candidat.predictedKw, at: candidat.isoTimestamp };
+}
 /** Répartition des mesures d'une fenêtre par qualification de la source. */
 export interface QualityCount {
   /** Qualification telle que le contrat l'énumère. */

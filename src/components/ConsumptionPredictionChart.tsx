@@ -28,7 +28,7 @@ import {
   YAxis,
 } from "recharts";
 import type { ChartPoint } from "../lib/series";
-import { valueDomain } from "../lib/series";
+import { nearestPredictionAt, valueDomain } from "../lib/series";
 import type { Measure } from "../lib/measures";
 import { formatMeasure, measureOf, seriesLabel } from "../lib/measures";
 import { token } from "../ui/tokens";
@@ -100,19 +100,50 @@ function formatKw(value: number | null): string {
   return value === null ? "—" : `${value.toFixed(1)} kW`;
 }
 
-interface TooltipProps {
+export interface TooltipProps {
   active?: boolean;
   payload?: { payload: ChartPoint }[];
   /** Grandeur tracée, pour n'afficher que ce que la courbe montre. */
   measure?: Measure;
+  /**
+   * Série complète, pour retrouver la prévision qui couvre l'instant survolé.
+   *
+   * Le point du survol ne suffit pas : mesures et prévisions n'ont aucun
+   * horodatage commun, et celui qu'on pointe ne porte donc presque jamais les
+   * deux à la fois.
+   */
+  points?: readonly ChartPoint[];
 }
 
-function SeriesTooltip({ active, payload, measure }: TooltipProps) {
+/**
+ * Contenu de l'infobulle du graphique.
+ *
+ * Exporté pour être éprouvé directement : sous jsdom, Recharts ne mesure pas
+ * son conteneur et n'active jamais l'infobulle au survol, si bien qu'aucun
+ * test passant par le graphique ne pourrait en lire une seule ligne.
+ */
+export function SeriesTooltip({ active, payload, measure, points }: TooltipProps) {
   const point = payload?.[0]?.payload;
   const grandeur = measure ?? measureOf("consumption");
   if (active !== true || point === undefined) {
     return null;
   }
+
+  // Prévision décrivant cet instant, et non prévision portée par ce point :
+  // survoler une mesure de 12 h 59 doit montrer la prévision de 13 h, celle
+  // que la courbe fait passer à cet endroit. Sans cela, l'infobulle restait
+  // muette sur la prédiction partout sauf aux rares instants exacts où le
+  // modèle a produit un point — c'est-à-dire, en pratique, jamais sous la
+  // souris.
+  //
+  // L'absence de série laisse le comportement d'avant, pour les appels qui ne
+  // passent que le payload.
+  const prevision =
+    points === undefined
+      ? point.predictedKw === null
+        ? null
+        : { value: point.predictedKw, at: point.isoTimestamp }
+      : nearestPredictionAt(points, point.timestamp);
 
   return (
     <div className="rounded-md border border-slate-300 bg-white p-3 text-sm shadow-lg">
@@ -128,7 +159,17 @@ function SeriesTooltip({ active, payload, measure }: TooltipProps) {
           manquante plutôt qu'à une prévision qui n'a jamais été calculée. */}
       {grandeur.predicted && (
         <p style={{ color: PREDICTED_COLOR }}>
-          {PREDICTED_SERIES_LABEL} : {formatKw(point.predictedKw)}
+          {PREDICTED_SERIES_LABEL} : {formatKw(prevision?.value ?? null)}
+          {/* L'heure de la prévision est rappelée dès qu'elle diffère de
+              l'instant survolé : la valeur affichée est celle d'une prévision
+              horaire, pas une grandeur relevée à la seconde près, et le
+              lecteur doit pouvoir le voir. */}
+          {prevision !== null && prevision.at !== point.isoTimestamp && (
+            <span className="text-slate-600">
+              {" "}
+              (prévision de {TIME_FORMAT.format(new Date(prevision.at))})
+            </span>
+          )}
         </p>
       )}
       {point.dataQuality !== null && (
@@ -199,7 +240,7 @@ export function ConsumptionPredictionChart({
                 fill: token("axe"),
               }}
             />
-            <Tooltip content={<SeriesTooltip measure={grandeur} />} />
+            <Tooltip content={<SeriesTooltip measure={grandeur} points={points} />} />
             <Legend />
             {/* Pontage des trous, tracé EN PREMIER donc sous la courbe réelle.
                 Sur le parc actuel, plus de mille mesures manquent sur une
@@ -238,7 +279,26 @@ export function ConsumptionPredictionChart({
             />
             {/* Une seule grandeur est prédite : ailleurs, cette courbe
                 n'existe pas, et l'afficher vide laisserait croire à une
-                prévision manquante. */}
+                prévision manquante.
+
+                `connectNulls` est ici à **true**, contrairement à la courbe
+                mesurée, et la différence n'est pas un oubli : les deux séries
+                n'ont pas le même pas. Les mesures arrivent à la minute, les
+                prévisions à l'heure — vingt-cinq points contre plusieurs
+                milliers. Chaque point prédit est donc entouré d'instants où la
+                prévision vaut `null`, non parce qu'elle manque, mais parce
+                qu'aucune prévision n'est attendue à cette seconde-là.
+
+                Sans ce réglage, Recharts ne trouve jamais deux points prédits
+                consécutifs à relier : la courbe se réduit à vingt-cinq
+                segments de longueur nulle, que `dot={false}` rend en outre
+                invisibles. La prédiction disparaissait purement et simplement
+                du graphique alors que l'API la servait.
+
+                La contrepartie est assumée : si le job de prédiction sautait
+                une heure, le trait la traverserait sans le dire. C'est moins
+                grave que de ne rien afficher, et `paired_points` du panneau
+                d'écart reste la mesure honnête de ce qui a été prévu. */}
             {grandeur.predicted && (
               <Line
                 className="serie-predite"
@@ -249,7 +309,7 @@ export function ConsumptionPredictionChart({
                 strokeWidth={2}
                 strokeDasharray="6 4"
                 dot={false}
-                connectNulls={false}
+                connectNulls
                 isAnimationActive={false}
               />
             )}
